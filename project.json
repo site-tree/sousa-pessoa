@@ -1,0 +1,14 @@
+{
+  "schema": "genealogia-web-project/1.1",
+  "title": "Construção de Genealogia",
+  "gedcom": "./data/familia.ged",
+  "media": "./media/",
+  "updatedAt": "2026-06-17T19:58:42.793Z",
+  "sourceFile": "familia.ged",
+  "autoload": true,
+  "github": {
+    "owner": "site-tree",
+    "repo": "sousa-pessoa",
+    "branch": "main"
+  }
+}
