@@ -1,0 +1,3086 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light" />
+  <meta name="description" content="Visualizador e editor local de árvores genealógicas GEDCOM." />
+  <title>Construtor de Genealogia</title>
+
+  <!-- Tailwind Play CDN: conveniente para protótipo. Para produção, compile o CSS. -->
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <!-- D3 v7: hierarquia, árvore, transições, pan e zoom. -->
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #f6f7fb;
+      --surface: #ffffff;
+      --surface-2: #f1f4f8;
+      --text: #1f2937;
+      --muted: #667085;
+      --line: #d0d5dd;
+      --primary: #315c4c;
+      --primary-strong: #24473b;
+      --primary-soft: #e8f1ed;
+      --accent: #8b6f47;
+      --danger: #b42318;
+      --shadow: 0 14px 38px rgba(16, 24, 40, .12);
+      --header-h: 72px;
+      --drawer-w: 430px;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+    body {
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background: var(--bg);
+    }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+
+    .app-shell { height: 100%; display: grid; grid-template-rows: var(--header-h) 1fr; }
+    .topbar {
+      z-index: 30;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 10px 16px;
+      background: rgba(255,255,255,.96);
+      border-bottom: 1px solid #e4e7ec;
+      box-shadow: 0 2px 8px rgba(16,24,40,.04);
+      backdrop-filter: blur(10px);
+    }
+    .brand { display: flex; align-items: center; min-width: 245px; gap: 11px; }
+    .brand-mark {
+      width: 42px; height: 42px; border-radius: 13px;
+      display: grid; place-items: center;
+      color: white; background: linear-gradient(145deg, var(--primary), #6a8d7f);
+      box-shadow: 0 7px 18px rgba(49,92,76,.24);
+      font-size: 21px;
+    }
+    .brand-title { font-size: 15px; font-weight: 760; line-height: 1.15; }
+    .brand-status { margin-top: 4px; font-size: 11px; color: var(--muted); max-width: 290px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .search-wrap { position: relative; flex: 1; max-width: 520px; min-width: 180px; }
+    .search-input {
+      width: 100%; height: 42px; padding: 0 42px 0 40px;
+      border: 1px solid #d0d5dd; border-radius: 12px;
+      background: #fff; outline: none; transition: .18s ease;
+    }
+    .search-input:focus { border-color: #7ca28f; box-shadow: 0 0 0 4px rgba(49,92,76,.11); }
+    .search-icon { position: absolute; left: 13px; top: 10px; color: #98a2b3; }
+    .shortcut { position: absolute; right: 10px; top: 11px; font-size: 10px; color: #98a2b3; border: 1px solid #e4e7ec; border-radius: 5px; padding: 2px 5px; }
+    .search-results {
+      position: absolute; z-index: 90; left: 0; right: 0; top: 48px;
+      max-height: 360px; overflow: auto; display: none;
+      background: white; border: 1px solid #e4e7ec; border-radius: 14px; box-shadow: var(--shadow);
+      padding: 6px;
+    }
+    .search-results.open { display: block; }
+    .search-item { width: 100%; display: flex; gap: 10px; align-items: center; border: 0; background: transparent; text-align: left; padding: 9px; border-radius: 10px; }
+    .search-item:hover, .search-item.active { background: var(--primary-soft); }
+    .search-item-name { font-weight: 680; font-size: 13px; }
+    .search-item-meta { color: var(--muted); font-size: 11px; margin-top: 2px; }
+
+    .toolbar { display: flex; align-items: center; gap: 7px; margin-left: auto; }
+    .control-btn, .icon-btn {
+      border: 1px solid #d0d5dd; background: #fff; color: #344054;
+      border-radius: 10px; min-height: 38px; transition: .16s ease;
+    }
+    .control-btn { display: inline-flex; align-items: center; gap: 7px; padding: 0 11px; font-size: 12px; font-weight: 650; }
+    .icon-btn { width: 38px; display: grid; place-items: center; }
+    .control-btn:hover, .icon-btn:hover { background: #f9fafb; border-color: #98a2b3; }
+    .control-btn.primary { background: var(--primary); border-color: var(--primary); color: white; }
+    .control-btn.primary:hover { background: var(--primary-strong); }
+    .control-btn.danger { background: #fff; border-color: #f0a39d; color: var(--danger); }
+    .control-btn.danger:hover { background: #fff1f0; border-color: var(--danger); }
+    .control-btn.danger-solid { background: var(--danger); border-color: var(--danger); color: #fff; }
+    .control-btn.danger-solid:hover { background: #912018; border-color: #912018; }
+    .toolbar select { height: 38px; border: 1px solid #d0d5dd; border-radius: 10px; background: white; padding: 0 28px 0 10px; font-size: 12px; color: #344054; }
+
+    .workspace { position: relative; min-height: 0; overflow: hidden; }
+    .tree-stage {
+      position: absolute; inset: 0;
+      background-color: var(--bg);
+      background-image: radial-gradient(#cfd6df 1px, transparent 1px);
+      background-size: 22px 22px;
+      user-select: none;
+    }
+    #treeSvg { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+    #treeSvg:active { cursor: grabbing; }
+    .tree-link { fill: none; stroke-width: 2.1; opacity: .84; }
+    .tree-link.ancestor { stroke: #879f94; }
+    .tree-link.descendant { stroke: #b49a72; }
+
+    .person-card {
+      position: relative; width: 260px; height: 112px;
+      display: grid; grid-template-columns: 62px 1fr; gap: 10px; align-items: center;
+      padding: 11px 13px; overflow: hidden;
+      background: rgba(255,255,255,.98); border: 1px solid #d0d5dd; border-radius: 14px;
+      box-shadow: 0 8px 22px rgba(16,24,40,.10);
+      transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+      cursor: pointer;
+    }
+    .person-card:hover { transform: translateY(-2px); box-shadow: 0 13px 30px rgba(16,24,40,.16); border-color: #98a2b3; }
+    .person-card.selected { border: 2px solid var(--primary); box-shadow: 0 0 0 4px rgba(49,92,76,.14), 0 13px 30px rgba(16,24,40,.15); }
+    .person-card.root::before { content: "FOCO"; position: absolute; top: 5px; right: 8px; font-size: 8px; font-weight: 800; letter-spacing: .09em; color: var(--primary); }
+    .person-photo {
+      width: 58px; height: 70px; border-radius: 11px; overflow: hidden; display: grid; place-items: center;
+      background: linear-gradient(145deg,#eef2f6,#dfe6ec); color: #667085; font-weight: 800; font-size: 18px;
+      border: 1px solid #e4e7ec;
+    }
+    .person-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .person-name { padding-right: 25px; font-weight: 760; font-size: 13px; line-height: 1.18; max-height: 34px; overflow: hidden; }
+    .person-life { margin-top: 5px; font-size: 11px; color: #475467; }
+    .person-place { margin-top: 3px; font-size: 10px; color: #98a2b3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .person-flags { position: absolute; right: 9px; bottom: 7px; display: flex; gap: 4px; }
+    .person-flag { font-size: 9px; color: #667085; background: #f2f4f7; padding: 2px 5px; border-radius: 999px; }
+    .branch-toggle {
+      position: absolute; top: 42px; width: 25px; height: 28px; border-radius: 9px;
+      border: 1px solid #d0d5dd; background: white; color: #475467; font-size: 10px; font-weight: 800;
+      display: grid; place-items: center; box-shadow: 0 3px 8px rgba(16,24,40,.08);
+    }
+    .branch-toggle:hover { background: var(--primary-soft); color: var(--primary); }
+    .branch-toggle.left { left: -13px; }
+    .branch-toggle.right { right: -13px; }
+    .branch-toggle.expanded { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+    .empty-state {
+      position: absolute; inset: 0; z-index: 5; display: grid; place-items: center; padding: 24px;
+      background: linear-gradient(rgba(246,247,251,.78), rgba(246,247,251,.9));
+    }
+    .empty-card { max-width: 620px; width: 100%; padding: 34px; text-align: center; background: white; border: 1px solid #e4e7ec; border-radius: 22px; box-shadow: var(--shadow); }
+    .empty-icon { width: 72px; height: 72px; margin: 0 auto 17px; display: grid; place-items: center; border-radius: 20px; background: var(--primary-soft); color: var(--primary); font-size: 31px; }
+    .empty-title { font-size: 22px; font-weight: 800; }
+    .empty-text { color: var(--muted); line-height: 1.6; margin: 10px 0 20px; }
+    .drop-zone { border: 2px dashed #a9b8b0; border-radius: 16px; padding: 18px; background: #fbfcfd; transition: .18s ease; }
+    .drop-zone.dragover { border-color: var(--primary); background: var(--primary-soft); transform: scale(1.01); }
+
+    .floating-tools { position: absolute; z-index: 20; left: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 7px; }
+    .floating-tools .icon-btn { box-shadow: 0 6px 18px rgba(16,24,40,.12); background: rgba(255,255,255,.96); }
+    .legend { position: absolute; z-index: 15; right: 16px; bottom: 16px; display: flex; gap: 10px; padding: 8px 10px; background: rgba(255,255,255,.92); border: 1px solid #e4e7ec; border-radius: 10px; font-size: 10px; color: #667085; box-shadow: 0 5px 15px rgba(16,24,40,.08); }
+    .legend-dot { display: inline-block; width: 18px; height: 3px; border-radius: 4px; vertical-align: middle; margin-right: 4px; }
+
+    .drawer {
+      position: absolute; z-index: 60; top: 0; right: 0; width: min(var(--drawer-w), 100vw); height: 100%;
+      display: flex; flex-direction: column;
+      background: white; border-left: 1px solid #e4e7ec; box-shadow: -18px 0 45px rgba(16,24,40,.15);
+      transform: translateX(102%); transition: transform .24s cubic-bezier(.2,.8,.2,1);
+    }
+    .drawer.open { transform: translateX(0); }
+    .drawer-header { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border-bottom: 1px solid #e4e7ec; }
+    .drawer-avatar { width: 64px; height: 72px; border-radius: 13px; overflow: hidden; display: grid; place-items: center; flex: 0 0 auto; background: #eef2f6; color: #667085; font-size: 20px; font-weight: 800; }
+    .drawer-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .drawer-heading { min-width: 0; flex: 1; }
+    .drawer-title { font-size: 17px; font-weight: 800; line-height: 1.2; }
+    .drawer-subtitle { margin-top: 5px; color: var(--muted); font-size: 11px; }
+    .drawer-tabs { display: grid; grid-template-columns: repeat(3, 1fr); padding: 8px 12px 0; border-bottom: 1px solid #e4e7ec; }
+    .drawer-tab { border: 0; background: transparent; padding: 10px 7px; color: #667085; font-size: 12px; font-weight: 680; border-bottom: 2px solid transparent; }
+    .drawer-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+    .drawer-body { min-height: 0; overflow: auto; flex: 1; padding: 15px; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    .section-title { margin: 4px 0 10px; font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #667085; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .field { display: flex; flex-direction: column; gap: 5px; }
+    .field.full { grid-column: 1 / -1; }
+    .field label { font-size: 11px; color: #475467; font-weight: 650; }
+    .field input, .field select, .field textarea {
+      width: 100%; border: 1px solid #d0d5dd; background: #fff; border-radius: 9px; outline: none; padding: 9px 10px; font-size: 12px;
+    }
+    .field textarea { min-height: 112px; resize: vertical; line-height: 1.45; }
+    .field input:focus, .field select:focus, .field textarea:focus { border-color: #7ca28f; box-shadow: 0 0 0 3px rgba(49,92,76,.1); }
+    .check-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+    .drawer-actions { position: sticky; bottom: -15px; display: flex; justify-content: flex-end; gap: 8px; margin: 18px -15px -15px; padding: 12px 15px; border-top: 1px solid #e4e7ec; background: rgba(255,255,255,.96); backdrop-filter: blur(8px); }
+    .mini-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0 17px; }
+    .mini-stat { padding: 9px; text-align: center; background: #f8fafb; border: 1px solid #e4e7ec; border-radius: 10px; }
+    .mini-stat strong { display: block; font-size: 16px; }
+    .mini-stat span { display: block; font-size: 9px; color: #667085; margin-top: 2px; }
+
+    .gallery { display: grid; grid-template-columns: repeat(2, 1fr); gap: 9px; }
+    .media-card { min-height: 120px; position: relative; overflow: hidden; border: 1px solid #e4e7ec; border-radius: 12px; background: #f8fafb; }
+    .media-card img { width: 100%; height: 116px; object-fit: cover; display: block; }
+    .media-card button { width: 100%; border: 0; background: transparent; padding: 0; text-align: left; }
+    .media-caption { padding: 7px 8px; font-size: 10px; color: #475467; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .doc-card { display: flex; align-items: center; gap: 10px; padding: 10px; min-height: 64px; }
+    .doc-icon { width: 34px; height: 40px; display: grid; place-items: center; border-radius: 7px; background: #fff0ed; color: var(--danger); font-size: 18px; }
+    .media-form { display: grid; gap: 9px; padding: 12px; margin-top: 15px; border: 1px solid #e4e7ec; border-radius: 12px; background: #f8fafb; }
+
+    .relation-group { margin-bottom: 18px; }
+    .relation-list { display: grid; gap: 7px; }
+    .relation-item { display: flex; align-items: center; gap: 9px; width: 100%; padding: 9px; text-align: left; border: 1px solid #e4e7ec; border-radius: 10px; background: #fff; }
+    .relation-item:hover { background: var(--primary-soft); border-color: #b9c9c1; }
+    .relation-initial { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: #eef2f6; color: #667085; font-weight: 800; font-size: 11px; }
+    .relation-name { font-size: 12px; font-weight: 700; }
+    .relation-meta { font-size: 10px; color: #98a2b3; margin-top: 2px; }
+    .add-relation-row { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 12px; }
+
+    .person-card.spouse-node { background: #fffaf2; border-color: #d8bf97; }
+    .person-card.spouse-node::before { content: "CÔNJUGE"; position: absolute; top: 5px; right: 8px; font-size: 8px; font-weight: 800; letter-spacing: .09em; color: var(--accent); }
+    .person-card.spouse-node.placeholder { opacity: .88; border-style: dashed; }
+    .person-card.spouse-node .person-place { color: #8b6f47; }
+    .branch-toggle.top { top: -14px; left: calc(50% - 13px); }
+    .branch-toggle.bottom { top: auto; bottom: -14px; left: calc(50% - 13px); }
+    .tree-link.union { stroke: #9b7a4f; stroke-dasharray: 6 4; }
+    .tree-link.child-link { stroke: #b49a72; }
+    .family-groups-list { display: grid; gap: 10px; }
+    .family-group-card { border: 1px solid #e4e7ec; border-radius: 12px; background: #fbfcfd; padding: 10px; }
+    .family-group-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .family-group-title { font-size: 12px; font-weight: 760; }
+    .family-group-meta { font-size: 10px; color: #98a2b3; margin-top: 2px; }
+    .family-children { display: grid; gap: 6px; padding-left: 12px; border-left: 2px solid #e8dcc8; }
+    .family-child-button { width: 100%; border: 0; background: transparent; text-align: left; color: #344054; padding: 5px 7px; border-radius: 8px; font-size: 11px; }
+    .family-child-button:hover { background: var(--primary-soft); }
+    .local-media-hint { padding: 9px 10px; border-radius: 9px; background: #eef6f2; border: 1px solid #c7ddd2; color: #315c4c; font-size: 10px; line-height: 1.45; }
+    .export-summary { margin-top: 14px; padding: 11px 12px; border-radius: 10px; background: #f2f4f7; color: #475467; font-size: 11px; line-height: 1.5; }
+
+    dialog { border: 0; border-radius: 18px; padding: 0; width: min(560px, calc(100vw - 28px)); box-shadow: 0 24px 70px rgba(16,24,40,.25); }
+    dialog::backdrop { background: rgba(16,24,40,.46); backdrop-filter: blur(2px); }
+    .dialog-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px; border-bottom: 1px solid #e4e7ec; }
+    .dialog-title { font-size: 16px; font-weight: 800; }
+    .dialog-body { padding: 17px 18px; }
+    .dialog-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 13px 18px; border-top: 1px solid #e4e7ec; background: #f9fafb; }
+    .hint { padding: 10px 11px; border-radius: 10px; background: #fffaeb; border: 1px solid #fedf89; color: #7a2e0e; font-size: 11px; line-height: 1.45; }
+    .empty-list { color: #98a2b3; font-size: 11px; padding: 8px 0; }
+
+    .toast-stack { position: fixed; z-index: 200; right: 18px; top: 86px; width: min(360px, calc(100vw - 36px)); display: grid; gap: 8px; pointer-events: none; }
+    .toast { padding: 12px 13px; color: #344054; background: white; border: 1px solid #e4e7ec; border-left: 4px solid var(--primary); border-radius: 11px; box-shadow: var(--shadow); font-size: 12px; line-height: 1.4; animation: toast-in .22s ease; }
+    .toast.error { border-left-color: var(--danger); }
+    .toast.warning { border-left-color: #f79009; }
+    @keyframes toast-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+
+    .loading-overlay { position: absolute; z-index: 120; inset: 0; display: none; place-items: center; background: rgba(246,247,251,.72); backdrop-filter: blur(3px); }
+    .loading-overlay.open { display: grid; }
+    .spinner { width: 42px; height: 42px; border: 4px solid #d0d5dd; border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (max-width: 980px) {
+      .brand { min-width: 0; }
+      .brand-title { display: none; }
+      .brand-status { max-width: 150px; }
+      .toolbar .control-btn span { display: none; }
+      .toolbar .control-btn { width: 38px; padding: 0; justify-content: center; }
+      .toolbar select { max-width: 130px; }
+    }
+    @media (max-width: 720px) {
+      :root { --header-h: 118px; }
+      .topbar { flex-wrap: wrap; align-content: center; padding: 9px 10px; gap: 7px; }
+      .brand { order: 1; }
+      .toolbar { order: 2; }
+      .search-wrap { order: 3; flex-basis: 100%; max-width: none; }
+      .toolbar select { display: none; }
+      .drawer { width: 100vw; }
+      .legend { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">🌳</div>
+        <div>
+          <div class="brand-title">Construtor de Genealogia</div>
+          <div id="fileStatus" class="brand-status">Nenhum GEDCOM carregado</div>
+        </div>
+      </div>
+
+      <div class="search-wrap">
+        <span class="search-icon" aria-hidden="true">⌕</span>
+        <input id="searchInput" class="search-input" type="search" autocomplete="off" placeholder="Pesquisar pessoa pelo nome…" aria-label="Pesquisar pessoa" disabled />
+        <span class="shortcut">Ctrl K</span>
+        <div id="searchResults" class="search-results" role="listbox"></div>
+      </div>
+
+      <div class="toolbar">
+        <input id="gedFile" type="file" accept=".ged,.gedcom,text/plain" hidden />
+        <input id="mediaFolderInput" type="file" webkitdirectory directory multiple hidden />
+        <button id="btnImport" class="control-btn primary" type="button" title="Abrir um ficheiro GEDCOM do computador">📂 <span>Abrir GEDCOM</span></button>
+        <button id="btnOpenLocalRepo" class="control-btn" type="button" title="Abrir ou ligar a pasta local clonada do repositório Git">🗂 <span id="localRepoLabel">Projeto local</span></button>
+        <button id="btnSaveLocalRepo" class="control-btn" type="button" title="Guardar o GEDCOM e copiar as mídias para a pasta local do projeto" disabled>💾 <span>Salvar na pasta</span></button>
+        <button id="btnSaveGitHub" class="control-btn" type="button" title="Fazer commit direto no repositório GitHub usando um token fornecido nesta sessão" disabled>☁ <span id="githubSaveLabel">Salvar no GitHub</span></button>
+        <button id="btnMediaFolder" class="control-btn" type="button" title="Associar uma pasta local de fotografias e documentos" disabled>🖼 <span id="mediaFolderLabel">Pasta de mídia</span></button>
+        <button id="btnLoadProject" class="control-btn" type="button" title="Carregar o GEDCOM publicado neste repositório">↻ <span>Projeto web</span></button>
+        <select id="orientationSelect" aria-label="Orientação da árvore" disabled>
+          <option value="verticalFamily">Antepassados ↑ foco ↓ famílias</option>
+          <option value="bilateral">Antepassados ← foco → famílias</option>
+          <option value="ancestors">Somente antepassados ↑</option>
+          <option value="descendants">Somente famílias e descendentes ↓</option>
+        </select>
+        <button id="btnExportGed" class="control-btn" type="button" title="Exportar GEDCOM atualizado" disabled>⇩ <span>GEDCOM</span></button>
+        <button id="btnExportJson" class="control-btn" type="button" title="Exportar JSON consolidado" disabled>{ } <span>JSON</span></button>
+        <button id="btnSettings" class="icon-btn" type="button" title="Configurações">⚙</button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section id="treeStage" class="tree-stage" aria-label="Árvore genealógica interativa">
+        <svg id="treeSvg" role="img" aria-label="Visualização da árvore genealógica">
+          <g id="treeViewport"></g>
+        </svg>
+
+        <div id="emptyState" class="empty-state">
+          <div class="empty-card">
+            <div class="empty-icon">⌘</div>
+            <div class="empty-title">Abra a sua árvore GEDCOM</div>
+            <p class="empty-text">O processamento é feito integralmente no navegador. O ficheiro não é enviado para nenhum servidor.</p>
+            <div id="dropZone" class="drop-zone">
+              <strong>Arraste o ficheiro .ged para esta área</strong><br />
+              <span style="font-size:12px;color:#667085">ou use o botão “Abrir GEDCOM”</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="floating-tools" aria-label="Ferramentas de zoom">
+          <button id="btnZoomIn" class="icon-btn" type="button" title="Aumentar zoom" disabled>＋</button>
+          <button id="btnZoomOut" class="icon-btn" type="button" title="Diminuir zoom" disabled>−</button>
+          <button id="btnFit" class="icon-btn" type="button" title="Ajustar árvore ao ecrã" disabled>⊡</button>
+          <button id="btnCenter" class="icon-btn" type="button" title="Centrar pessoa em foco" disabled>◎</button>
+        </div>
+
+        <div class="legend">
+          <span><i class="legend-dot" style="background:#879f94"></i>antepassados</span>
+          <span><i class="legend-dot" style="background:#b49a72"></i>descendentes</span>
+        </div>
+
+        <div id="loadingOverlay" class="loading-overlay" aria-live="polite">
+          <div style="text-align:center"><div class="spinner"></div><div id="loadingText" style="margin-top:10px;font-size:12px;color:#475467">A processar…</div></div>
+        </div>
+      </section>
+
+      <aside id="drawer" class="drawer" aria-label="Detalhes da pessoa" aria-hidden="true">
+        <div class="drawer-header">
+          <div id="drawerAvatar" class="drawer-avatar"></div>
+          <div class="drawer-heading">
+            <div id="drawerTitle" class="drawer-title">Pessoa</div>
+            <div id="drawerSubtitle" class="drawer-subtitle"></div>
+          </div>
+          <button id="drawerClose" class="icon-btn" type="button" title="Fechar painel">×</button>
+        </div>
+
+        <div class="drawer-tabs" role="tablist">
+          <button class="drawer-tab active" type="button" data-tab="details">Dados</button>
+          <button class="drawer-tab" type="button" data-tab="media">Mídia</button>
+          <button class="drawer-tab" type="button" data-tab="relations">Relações</button>
+        </div>
+
+        <div class="drawer-body">
+          <section id="tab-details" class="tab-panel active">
+            <div id="personStats" class="mini-grid"></div>
+            <form id="personForm">
+              <div class="section-title">Identificação</div>
+              <div class="form-grid">
+                <div class="field"><label for="fieldGiven">Nome próprio</label><input id="fieldGiven" name="given" /></div>
+                <div class="field"><label for="fieldSurname">Apelido / sobrenome</label><input id="fieldSurname" name="surname" /></div>
+                <div class="field"><label for="fieldSex">Sexo</label><select id="fieldSex" name="sex"><option value="U">Não informado</option><option value="M">Masculino</option><option value="F">Feminino</option><option value="X">Outro / não binário</option></select></div>
+                <div class="field"><label for="fieldOccupation">Profissão</label><input id="fieldOccupation" name="occupation" /></div>
+              </div>
+
+              <div class="section-title" style="margin-top:18px">Nascimento</div>
+              <div class="form-grid">
+                <div class="field"><label for="fieldBirthDate">Data GEDCOM</label><input id="fieldBirthDate" name="birthDate" placeholder="12 JUL 1982" /></div>
+                <div class="field"><label for="fieldBirthPlace">Local</label><input id="fieldBirthPlace" name="birthPlace" /></div>
+              </div>
+
+              <div class="section-title" style="margin-top:18px">Falecimento</div>
+              <label class="check-row"><input id="fieldDeceased" type="checkbox" /> Marcar como falecido(a)</label>
+              <div class="form-grid" style="margin-top:9px">
+                <div class="field"><label for="fieldDeathDate">Data GEDCOM</label><input id="fieldDeathDate" name="deathDate" placeholder="ABT 2019" /></div>
+                <div class="field"><label for="fieldDeathPlace">Local</label><input id="fieldDeathPlace" name="deathPlace" /></div>
+              </div>
+
+              <div class="section-title" style="margin-top:18px">Biografia e notas</div>
+              <div class="field"><textarea id="fieldBiography" name="biography" placeholder="Notas biográficas, hipóteses de investigação e referências documentais…"></textarea></div>
+
+              <div class="drawer-actions">
+                <button id="btnDeletePerson" class="control-btn danger" type="button" style="margin-right:auto">🗑 Excluir pessoa</button>
+                <button id="btnFocusPerson" class="control-btn" type="button">◎ Focar</button>
+                <button class="control-btn primary" type="submit">Guardar alterações</button>
+              </div>
+            </form>
+          </section>
+
+          <section id="tab-media" class="tab-panel">
+            <div class="section-title">Galeria e documentos</div>
+            <div id="mediaGallery" class="gallery"></div>
+            <div class="media-form">
+              <strong style="font-size:12px">Adicionar mídia</strong>
+              <div class="field"><label for="mediaLocalFile">Ficheiro local</label><input id="mediaLocalFile" type="file" accept="image/*,application/pdf,.doc,.docx,.odt,.txt" /></div>
+              <div id="mediaLocalHint" class="local-media-hint">Ao escolher um ficheiro local, a página mostra-o imediatamente e grava no GEDCOM uma referência para a pasta <strong>./media/</strong>.</div>
+              <div class="field"><label for="mediaPath">Ou informe URL/caminho manualmente</label><input id="mediaPath" placeholder="./media/certidao-casamento.pdf" /></div>
+              <div class="field"><label for="mediaTitle">Título</label><input id="mediaTitle" placeholder="Certidão de casamento" /></div>
+              <label class="check-row"><input id="mediaPrimary" type="checkbox" /> Usar como foto principal</label>
+              <button id="btnAddMedia" class="control-btn primary" type="button">＋ Adicionar mídia</button>
+            </div>
+          </section>
+
+          <section id="tab-relations" class="tab-panel">
+            <div class="relation-group"><div class="section-title">Pais</div><div id="parentsList" class="relation-list"></div></div>
+            <div class="relation-group"><div class="section-title">Cônjuges e filhos por unidade familiar</div><div id="familyGroupsList" class="family-groups-list"></div></div>
+            <div class="section-title">Adicionar familiar</div>
+            <div class="add-relation-row">
+              <button class="control-btn" type="button" data-add-relative="father">＋ Pai</button>
+              <button class="control-btn" type="button" data-add-relative="mother">＋ Mãe</button>
+              <button class="control-btn" type="button" data-add-relative="spouse">＋ Cônjuge</button>
+              <button class="control-btn" type="button" data-add-relative="child">＋ Filho(a)</button>
+            </div>
+          </section>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <dialog id="relativeDialog">
+    <form id="relativeForm">
+      <div class="dialog-header"><div id="relativeDialogTitle" class="dialog-title">Adicionar familiar</div><button class="icon-btn" type="button" data-close-dialog="relativeDialog">×</button></div>
+      <div class="dialog-body">
+        <input id="relativeType" type="hidden" />
+        <div class="form-grid">
+          <div class="field"><label for="relativeGiven">Nome próprio</label><input id="relativeGiven" required /></div>
+          <div class="field"><label for="relativeSurname">Apelido / sobrenome</label><input id="relativeSurname" /></div>
+          <div class="field"><label for="relativeSex">Sexo</label><select id="relativeSex"><option value="U">Não informado</option><option value="M">Masculino</option><option value="F">Feminino</option><option value="X">Outro / não binário</option></select></div>
+          <div class="field"><label for="relativeBirthDate">Nascimento</label><input id="relativeBirthDate" placeholder="ABT 1900" /></div>
+          <div class="field full"><label for="relativeBirthPlace">Local de nascimento</label><input id="relativeBirthPlace" /></div>
+          <div id="relativeFamilyField" class="field full" style="display:none"><label for="relativeFamily">Unidade familiar para o novo filho</label><select id="relativeFamily"></select></div>
+        </div>
+        <div class="hint" style="margin-top:14px">A relação é criada primeiro no modelo local. Depois, use “Salvar no GitHub” ou “Salvar na pasta” para persistir a alteração.</div>
+      </div>
+      <div class="dialog-footer"><button class="control-btn" type="button" data-close-dialog="relativeDialog">Cancelar</button><button class="control-btn primary" type="submit">Criar e relacionar</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="exportGedDialog">
+    <form id="exportGedForm">
+      <div class="dialog-header"><div class="dialog-title">Exportar GEDCOM</div><button class="icon-btn" type="button" data-close-dialog="exportGedDialog">×</button></div>
+      <div class="dialog-body">
+        <div class="form-grid">
+          <div class="field full"><label for="exportScope">Conteúdo a guardar</label>
+            <select id="exportScope">
+              <option value="all">Toda a estrutura genealógica</option>
+              <option value="branch">Ramo completo da pessoa escolhida</option>
+              <option value="ancestors">Somente antepassados da pessoa escolhida</option>
+              <option value="descendants">Somente descendentes e respetivos cônjuges</option>
+              <option value="nuclear">Famílias nucleares da pessoa escolhida</option>
+              <option value="family">Uma unidade familiar específica</option>
+            </select>
+          </div>
+          <div id="exportRootField" class="field full"><label for="exportRootPerson">Pessoa de referência</label><select id="exportRootPerson"></select></div>
+          <div id="exportFamilyField" class="field full" style="display:none"><label for="exportFamily">Unidade familiar</label><select id="exportFamily"></select></div>
+          <div class="field full"><label for="exportFileName">Nome do ficheiro</label><input id="exportFileName" /></div>
+        </div>
+        <div id="exportSummary" class="export-summary"></div>
+        <div class="hint" style="margin-top:14px">Este botão gera um ficheiro para download. Para persistir a árvore e as imagens numa pasta clonada do Git, use <strong>Projeto local → Salvar na pasta</strong>. A exportação de ramo cria apenas uma cópia filtrada.</div>
+      </div>
+      <div class="dialog-footer"><button class="control-btn" type="button" data-close-dialog="exportGedDialog">Cancelar</button><button class="control-btn primary" type="submit">⇩ Gerar GEDCOM</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="githubDialog">
+    <form id="githubForm">
+      <div class="dialog-header"><div class="dialog-title">Salvar diretamente no GitHub</div><button class="icon-btn" type="button" data-close-dialog="githubDialog">×</button></div>
+      <div class="dialog-body">
+        <div class="form-grid">
+          <div class="field"><label for="githubOwner">Utilizador / organização</label><input id="githubOwner" autocomplete="off" required /></div>
+          <div class="field"><label for="githubRepo">Repositório</label><input id="githubRepo" autocomplete="off" required /></div>
+          <div class="field"><label for="githubBranch">Branch</label><input id="githubBranch" value="main" autocomplete="off" required /></div>
+          <div class="field"><label for="githubGedcomPath">Caminho do GEDCOM</label><input id="githubGedcomPath" value="data/familia.ged" autocomplete="off" required /></div>
+          <div class="field full"><label for="githubMediaPath">Pasta de mídia</label><input id="githubMediaPath" value="media" autocomplete="off" required /></div>
+          <div class="field full"><label for="githubCommitMessage">Mensagem do commit</label><input id="githubCommitMessage" value="Atualiza árvore genealógica" required /></div>
+          <div class="field full"><label for="githubToken">Fine-grained personal access token</label><input id="githubToken" type="password" autocomplete="off" placeholder="github_pat_…" required /></div>
+          <div class="field full"><label class="check-row"><input id="githubUploadMedia" type="checkbox" checked /> Enviar também fotografias e documentos locais ainda não publicados</label></div>
+        </div>
+        <div id="githubRepoSummary" class="export-summary"></div>
+        <div class="hint" style="margin-top:14px"><strong>Segurança:</strong> o token fica apenas na memória desta página e não é gravado no GEDCOM, no project.json nem no navegador. Use um token limitado a este repositório, com permissão de leitura e escrita em <strong>Contents</strong>.</div>
+      </div>
+      <div class="dialog-footer"><button class="control-btn" type="button" data-close-dialog="githubDialog">Cancelar</button><button class="control-btn primary" type="submit">☁ Fazer commit no GitHub</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="deletePersonDialog">
+    <form id="deletePersonForm">
+      <div class="dialog-header"><div class="dialog-title">Excluir pessoa</div><button class="icon-btn" type="button" data-close-dialog="deletePersonDialog">×</button></div>
+      <div class="dialog-body">
+        <input id="deletePersonId" type="hidden" />
+        <div id="deletePersonSummary" class="export-summary"></div>
+        <label class="check-row" style="margin-top:14px"><input id="deleteOrphanFamilies" type="checkbox" checked /> Remover unidades familiares que ficarem sem relação útil</label>
+        <div class="hint" style="margin-top:14px">A pessoa será retirada das relações de pais, cônjuges e filhos. Os ficheiros físicos de mídia não serão apagados automaticamente, para evitar perda acidental. A alteração só se torna permanente depois de salvar na pasta ou no GitHub.</div>
+      </div>
+      <div class="dialog-footer"><button class="control-btn" type="button" data-close-dialog="deletePersonDialog">Cancelar</button><button class="control-btn danger-solid" type="submit">Excluir definitivamente</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="settingsDialog">
+    <form id="settingsForm">
+      <div class="dialog-header"><div class="dialog-title">Configurações da árvore</div><button class="icon-btn" type="button" data-close-dialog="settingsDialog">×</button></div>
+      <div class="dialog-body">
+        <div class="form-grid">
+          <div class="field full"><label for="settingMediaBase">Pasta-base das mídias</label><input id="settingMediaBase" value="./media/" /></div>
+          <div class="field"><label for="settingInitialGenerations">Gerações abertas ao focar</label><input id="settingInitialGenerations" type="number" min="1" max="5" value="2" /></div>
+          <div class="field"><label for="settingMaxDepth">Profundidade máxima renderizada</label><input id="settingMaxDepth" type="number" min="2" max="12" value="6" /></div>
+          <div class="field full"><label class="check-row"><input id="settingPreferLocal" type="checkbox" checked /> Preferir ficheiros locais e usar a URL original apenas como fallback</label></div>
+        </div>
+        <div class="hint" style="margin-top:14px">Em GitHub Pages de projeto, use caminhos relativos como <strong>./media/</strong>. Um caminho absoluto como <strong>/media/</strong> aponta para a raiz do domínio e normalmente quebra quando o site está em /nome-do-repositorio/.</div>
+      </div>
+      <div class="dialog-footer"><button class="control-btn" type="button" data-close-dialog="settingsDialog">Cancelar</button><button class="control-btn primary" type="submit">Aplicar</button></div>
+    </form>
+  </dialog>
+
+  <div id="toastStack" class="toast-stack" aria-live="polite"></div>
+
+  <script type="module">
+    const CARD_W = 260;
+    const CARD_H = 112;
+    const GED_LINE = /^(\d+)\s+(?:(@[^@]+@)\s+)?([A-Za-z0-9_]+)(?:\s(.*))?$/;
+    const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+
+    const state = {
+      ast: null,
+      recordIndex: new Map(),
+      persons: new Map(),
+      families: new Map(),
+      rootId: null,
+      selectedId: null,
+      fileName: '',
+      expandedAncestors: new Set(),
+      expandedDescendants: new Set(),
+      collapsedFamilies: new Set(),
+      orientation: 'verticalFamily',
+      localMediaByKey: new Map(),
+      localMediaObjectUrls: new Set(),
+      pendingLocalMediaFile: null,
+      pendingLocalMediaTarget: '',
+      projectDirectoryHandle: null,
+      projectDirectoryName: '',
+      projectManifest: null,
+      dirty: false,
+      githubSaving: false,
+      settings: {
+        mediaBase: './media/',
+        preferLocal: true,
+        initialGenerations: 2,
+        maxDepth: 6
+      },
+      zoom: null,
+      lastLayout: null,
+      activeSearchIndex: -1
+    };
+
+    const $ = (selector, root = document) => root.querySelector(selector);
+    const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+
+    function toast(message, type = 'info', timeout = 3600) {
+      const el = document.createElement('div');
+      el.className = `toast ${type}`;
+      el.textContent = message;
+      $('#toastStack').appendChild(el);
+      setTimeout(() => {
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(-6px)';
+        setTimeout(() => el.remove(), 220);
+      }, timeout);
+    }
+
+    function setLoading(open, text = 'A processar…') {
+      $('#loadingText').textContent = text;
+      $('#loadingOverlay').classList.toggle('open', open);
+    }
+
+    function normalizeSearch(value = '') {
+      return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    }
+
+    function decodeEntities(input = '') {
+      let value = String(input);
+      const textarea = document.createElement('textarea');
+      for (let i = 0; i < 3; i++) {
+        textarea.innerHTML = value;
+        const decoded = textarea.value;
+        if (decoded === value) break;
+        value = decoded;
+      }
+      return value;
+    }
+
+    function makeNode(level, tag, value = '', xref = null, children = []) {
+      return { level, tag, value, xref, children, synthetic: false };
+    }
+
+    function parseGedcom(text) {
+      const clean = text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+      const records = [];
+      const stack = [];
+      let lastNode = null;
+      let lastTextNode = null;
+      let repairedLines = 0;
+      let ignoredLines = 0;
+
+      clean.split('\n').forEach((rawLine, index) => {
+        const line = rawLine.replace(/\u0000/g, '');
+        if (!line.trim()) return;
+        const match = line.match(GED_LINE);
+
+        if (!match) {
+          const target = lastTextNode || lastNode;
+          if (target) {
+            const continuation = makeNode(target.level + 1, 'CONT', line.trim());
+            continuation.synthetic = true;
+            target.children.push(continuation);
+            repairedLines += 1;
+          } else {
+            ignoredLines += 1;
+          }
+          return;
+        }
+
+        const level = Number(match[1]);
+        const node = makeNode(level, match[3], match[4] ?? '', match[2] ?? null);
+        node.lineNumber = index + 1;
+
+        if (level === 0) {
+          records.push(node);
+          stack.length = 0;
+          stack[0] = node;
+        } else {
+          let parent = stack[level - 1];
+          if (!parent) {
+            for (let candidate = level - 2; candidate >= 0 && !parent; candidate--) parent = stack[candidate];
+          }
+          if (parent) parent.children.push(node);
+          else {
+            node.level = 0;
+            records.push(node);
+          }
+          stack[level] = node;
+          stack.length = level + 1;
+        }
+
+        lastNode = node;
+        if (['TEXT','NOTE','CONC','CONT','PAGE','TITL'].includes(node.tag)) lastTextNode = node;
+        else if (level === 0) lastTextNode = null;
+      });
+
+      return { records, repairedLines, ignoredLines, importedAt: new Date().toISOString() };
+    }
+
+    function directChildren(node, tag) {
+      return node?.children?.filter(child => child.tag === tag) ?? [];
+    }
+
+    function directChild(node, tag) {
+      return directChildren(node, tag)[0] ?? null;
+    }
+
+    function nodeText(node) {
+      if (!node) return '';
+      let output = node.value ?? '';
+      for (const child of node.children ?? []) {
+        if (child.tag === 'CONC') output += child.value ?? '';
+        if (child.tag === 'CONT') output += `\n${child.value ?? ''}`;
+      }
+      return decodeEntities(output).trim();
+    }
+
+    function directValue(node, tag) {
+      return nodeText(directChild(node, tag));
+    }
+
+    function cleanGedName(raw = '') {
+      return raw.replace(/\//g, '').replace(/\s+/g, ' ').trim();
+    }
+
+    function parseGedName(record) {
+      const nameNode = directChild(record, 'NAME');
+      const raw = nodeText(nameNode);
+      const givenFromTag = directValue(nameNode, 'GIVN');
+      const surnameFromTag = directValue(nameNode, 'SURN');
+      const match = raw.match(/^(.*?)\s*\/(.*?)\/(?:\s*(.*))?$/);
+      const given = givenFromTag || match?.[1]?.trim() || cleanGedName(raw);
+      const surname = surnameFromTag || match?.[2]?.trim() || '';
+      const suffix = match?.[3]?.trim() || '';
+      const display = [given, surname, suffix].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim() || `Pessoa ${record.xref ?? ''}`;
+      return { raw, given, surname, suffix, display };
+    }
+
+    function parseEvent(record, tag) {
+      const event = directChild(record, tag);
+      if (!event) return { exists: false, value: '', date: '', place: '', notes: '' };
+      return {
+        exists: true,
+        value: nodeText(event),
+        date: directValue(event, 'DATE'),
+        place: directValue(event, 'PLAC'),
+        notes: directChildren(event, 'NOTE').map(nodeText).filter(Boolean).join('\n')
+      };
+    }
+
+    function parseMediaNode(objeNode, recordIndex) {
+      let source = objeNode;
+      const pointer = (objeNode.value || '').trim();
+      if (/^@.+@$/.test(pointer) && recordIndex.has(pointer)) source = recordIndex.get(pointer);
+      const fileNode = directChild(source, 'FILE');
+      const file = nodeText(fileNode);
+      if (!file) return null;
+      const format = (directValue(fileNode, 'FORM') || directValue(source, 'FORM') || extensionFromPath(file)).toLowerCase();
+      const title = directValue(fileNode, 'TITL') || directValue(source, 'TITL') || fileNameFromPath(file) || 'Mídia';
+      const primaryTags = ['_PRIM','_PRIMARY','_PERSONALPHOTO','_PRIM_CUTOUT','_PROFILE'];
+      const primary = [objeNode, source].some(node => primaryTags.some(tag => directValue(node, tag).toUpperCase() === 'Y'));
+      const note = [...directChildren(source, 'NOTE'), ...directChildren(fileNode, 'NOTE')].map(nodeText).filter(Boolean).join('\n');
+      const image = ['jpg','jpeg','png','gif','webp','bmp','svg','avif'].includes(format) || /\.(jpe?g|png|gif|webp|bmp|svg|avif)(?:$|[?#])/i.test(file);
+      return { file, format, title, primary, note, image, node: objeNode, sourceNode: source, fileNode };
+    }
+
+    function buildModel(ast) {
+      const recordIndex = new Map();
+      ast.records.forEach(record => { if (record.xref) recordIndex.set(record.xref, record); });
+
+      const persons = new Map();
+      const families = new Map();
+
+      ast.records.filter(record => record.tag === 'INDI').forEach(record => {
+        const name = parseGedName(record);
+        const birth = parseEvent(record, 'BIRT');
+        const death = parseEvent(record, 'DEAT');
+        const notes = directChildren(record, 'NOTE').map(nodeText).filter(Boolean);
+        const media = directChildren(record, 'OBJE').map(node => parseMediaNode(node, recordIndex)).filter(Boolean);
+        const person = {
+          id: record.xref,
+          record,
+          name,
+          sex: directValue(record, 'SEX') || 'U',
+          birth,
+          death,
+          occupation: directValue(record, 'OCCU'),
+          education: directValue(record, 'EDUC'),
+          religion: directValue(record, 'RELI'),
+          nationality: directValue(record, 'NATI'),
+          biography: notes.join('\n\n'),
+          media,
+          spouseFamilyIds: new Set(directChildren(record, 'FAMS').map(nodeText).filter(Boolean)),
+          parentFamilyIds: new Set(directChildren(record, 'FAMC').map(nodeText).filter(Boolean)),
+          sourceCount: directChildren(record, 'SOUR').length
+        };
+        persons.set(person.id, person);
+      });
+
+      ast.records.filter(record => record.tag === 'FAM').forEach(record => {
+        const marriage = parseEvent(record, 'MARR');
+        const divorce = parseEvent(record, 'DIV');
+        const family = {
+          id: record.xref,
+          record,
+          husbandId: directValue(record, 'HUSB') || null,
+          wifeId: directValue(record, 'WIFE') || null,
+          childrenIds: directChildren(record, 'CHIL').map(nodeText).filter(Boolean),
+          marriage,
+          divorce
+        };
+        families.set(family.id, family);
+      });
+
+      for (const family of families.values()) {
+        const parentIds = [family.husbandId, family.wifeId].filter(Boolean);
+        parentIds.forEach(id => persons.get(id)?.spouseFamilyIds.add(family.id));
+        family.childrenIds.forEach(id => persons.get(id)?.parentFamilyIds.add(family.id));
+      }
+
+      state.ast = ast;
+      state.recordIndex = recordIndex;
+      state.persons = persons;
+      state.families = families;
+    }
+
+    function fileNameFromPath(value = '') {
+      if (!value) return '';
+      try {
+        if (/^https?:\/\//i.test(value)) {
+          const url = new URL(value);
+          return decodeURIComponent(url.pathname.split('/').filter(Boolean).pop() || 'media');
+        }
+      } catch { /* caminho não URL */ }
+      return value.replace(/\\/g, '/').split('/').filter(Boolean).pop()?.split(/[?#]/)[0] || 'media';
+    }
+
+    function extensionFromPath(value = '') {
+      const name = fileNameFromPath(value);
+      return name.includes('.') ? name.split('.').pop().toLowerCase() : '';
+    }
+
+    function normalizeMediaBase(base = './media/') {
+      const trimmed = base.trim() || './media/';
+      return trimmed.endsWith('/') ? trimmed : `${trimmed}/`;
+    }
+
+    function normalizeMediaLookupKey(value = '') {
+      return decodeURIComponent(String(value || ''))
+        .replace(/\\/g, '/')
+        .replace(/^\.\//, '')
+        .replace(/^\/+/, '')
+        .toLowerCase()
+        .trim();
+    }
+
+    function mediaLookupKeys(value = '') {
+      const normalized = normalizeMediaLookupKey(value);
+      const fileName = normalizeMediaLookupKey(fileNameFromPath(value));
+      const withoutFirstFolder = normalized.includes('/') ? normalized.split('/').slice(1).join('/') : normalized;
+      return [...new Set([normalized, withoutFirstFolder, fileName, normalizeMediaLookupKey(`${normalizeMediaBase(state.settings.mediaBase)}${fileName}`)].filter(Boolean))];
+    }
+
+    function clearLocalMediaRegistry() {
+      state.localMediaObjectUrls.forEach(url => URL.revokeObjectURL(url));
+      state.localMediaObjectUrls.clear();
+      state.localMediaByKey.clear();
+      state.pendingLocalMediaFile = null;
+      state.pendingLocalMediaTarget = '';
+      const input = $('#mediaLocalFile');
+      if (input) input.value = '';
+      const label = $('#mediaFolderLabel');
+      if (label) label.textContent = 'Pasta de mídia';
+    }
+
+    function registerLocalMediaFile(file, relativeOverride = '') {
+      if (!file) return null;
+      const url = URL.createObjectURL(file);
+      state.localMediaObjectUrls.add(url);
+      const relative = relativeOverride || file.webkitRelativePath || file.name;
+      const entry = { file, url, relative };
+      const keys = new Set([
+        ...mediaLookupKeys(relative),
+        ...mediaLookupKeys(file.name),
+        ...mediaLookupKeys(`${normalizeMediaBase(state.settings.mediaBase)}${fileNameFromPath(relative || file.name)}`)
+      ]);
+      keys.forEach(key => state.localMediaByKey.set(key, entry));
+      return entry;
+    }
+
+    function registerLocalMediaFiles(files) {
+      const list = [...(files || [])].filter(file => file && file.name);
+      list.forEach(registerLocalMediaFile);
+      const label = $('#mediaFolderLabel');
+      if (label) label.textContent = list.length ? `Mídia local (${list.length})` : 'Pasta de mídia';
+      if (state.rootId) {
+        renderTree();
+        if (state.selectedId) renderDrawer(state.selectedId);
+      }
+      return list.length;
+    }
+
+    function findLocalMediaEntry(path = '') {
+      for (const key of mediaLookupKeys(path)) {
+        const entry = state.localMediaByKey.get(key);
+        if (entry) return entry;
+      }
+      return null;
+    }
+
+    function mediaCandidates(media) {
+      if (!media?.file) return [];
+      const original = media.file.trim();
+      if (/^(data:|blob:)/i.test(original)) return [original];
+      const localEntry = findLocalMediaEntry(original);
+      const localProjectPath = `${normalizeMediaBase(state.settings.mediaBase)}${fileNameFromPath(original)}`;
+      const values = state.settings.preferLocal
+        ? [localEntry?.url, localProjectPath, original]
+        : [original, localEntry?.url, localProjectPath];
+      return [...new Set(values.filter(Boolean))];
+    }
+
+    function applyImageFallback(img, candidates) {
+      const queue = [...candidates];
+      const next = () => {
+        const src = queue.shift();
+        if (!src) {
+          img.remove();
+          return;
+        }
+        img.src = src;
+      };
+      img.onerror = next;
+      next();
+    }
+
+    function primaryMedia(person) {
+      return person?.media.find(item => item.image && item.primary) || person?.media.find(item => item.image) || null;
+    }
+
+
+    function supportsLocalRepository() {
+      return typeof window.showDirectoryPicker === 'function';
+    }
+
+    async function ensureDirectoryPermission(handle, mode = 'readwrite') {
+      if (!handle) return false;
+      const options = { mode };
+      if ((await handle.queryPermission?.(options)) === 'granted') return true;
+      return (await handle.requestPermission?.(options)) === 'granted';
+    }
+
+    function splitProjectPath(path = '') {
+      return String(path).replace(/\\/g, '/').replace(/^\.\//, '').split('/').filter(Boolean);
+    }
+
+    async function getDirectoryByPath(root, path = '', create = false) {
+      let directory = root;
+      for (const part of splitProjectPath(path)) directory = await directory.getDirectoryHandle(part, { create });
+      return directory;
+    }
+
+    async function getFileHandleByPath(root, path, create = false) {
+      const parts = splitProjectPath(path);
+      const fileName = parts.pop();
+      if (!fileName) throw new Error('Caminho de ficheiro inválido.');
+      const directory = await getDirectoryByPath(root, parts.join('/'), create);
+      return directory.getFileHandle(fileName, { create });
+    }
+
+    async function readProjectFile(root, path) {
+      const handle = await getFileHandleByPath(root, path, false);
+      return handle.getFile();
+    }
+
+    async function writeProjectFile(root, path, content) {
+      const handle = await getFileHandleByPath(root, path, true);
+      const writable = await handle.createWritable();
+      await writable.write(content);
+      await writable.close();
+      return handle;
+    }
+
+    async function collectFilesFromDirectory(directory, prefix = '') {
+      const files = [];
+      for await (const [name, handle] of directory.entries()) {
+        const relative = prefix ? `${prefix}/${name}` : name;
+        if (handle.kind === 'file') {
+          const file = await handle.getFile();
+          Object.defineProperty(file, 'projectRelativePath', { value: relative, configurable: true });
+          files.push(file);
+        } else if (handle.kind === 'directory') {
+          files.push(...await collectFilesFromDirectory(handle, relative));
+        }
+      }
+      return files;
+    }
+
+    function sanitizeMediaFileName(name = 'midia') {
+      const cleaned = String(name).normalize('NFC').replace(/[<>:"/\\|?*\u0000-\u001F]/g, '_').replace(/\s+/g, ' ').trim();
+      return cleaned || `midia_${Date.now()}`;
+    }
+
+    function uniqueMediaFileName(originalName = 'midia') {
+      const safe = sanitizeMediaFileName(originalName);
+      const dot = safe.lastIndexOf('.');
+      const stem = dot > 0 ? safe.slice(0, dot) : safe;
+      const ext = dot > 0 ? safe.slice(dot) : '';
+      const used = new Set();
+      for (const person of state.persons.values()) {
+        person.media.forEach(item => used.add(normalizeMediaLookupKey(fileNameFromPath(item.file))));
+      }
+      let candidate = safe;
+      let index = 2;
+      while (used.has(normalizeMediaLookupKey(candidate))) candidate = `${stem}_${index++}${ext}`;
+      return candidate;
+    }
+
+    function setMediaFileReference(media, value) {
+      if (!media) return;
+      let fileNode = media.fileNode || directChild(media.sourceNode, 'FILE');
+      if (!fileNode) {
+        fileNode = makeNode((media.sourceNode?.level || 1) + 1, 'FILE', value);
+        media.sourceNode?.children.push(fileNode);
+      } else fileNode.value = value;
+      media.file = value;
+      media.fileNode = fileNode;
+    }
+
+    function markDirty(message = '') {
+      state.dirty = true;
+      updateStatus();
+      updateLocalProjectUi();
+      updateGitHubUi();
+      if (message) toast(message);
+    }
+
+    function inferGitHubRepository() {
+      const manifestGithub = state.projectManifest?.github || {};
+      let owner = manifestGithub.owner || '';
+      let repo = manifestGithub.repo || '';
+      if (!owner && location.hostname.toLowerCase().endsWith('.github.io')) owner = location.hostname.split('.')[0];
+      if (!repo && owner && location.hostname.toLowerCase().endsWith('.github.io')) {
+        const firstPath = location.pathname.split('/').filter(Boolean)[0];
+        repo = firstPath || `${owner}.github.io`;
+      }
+      return {
+        owner,
+        repo,
+        branch: manifestGithub.branch || 'main',
+        gedcomPath: String(state.projectManifest?.gedcom || './data/familia.ged').replace(/^\.\//, ''),
+        mediaPath: String(state.projectManifest?.media || './media/').replace(/^\.\//, '').replace(/\/$/, '') || 'media'
+      };
+    }
+
+    function updateGitHubUi() {
+      const button = $('#btnSaveGitHub');
+      if (button) button.disabled = !state.ast || state.githubSaving;
+      const label = $('#githubSaveLabel');
+      const config = inferGitHubRepository();
+      if (label) label.textContent = config.owner && config.repo ? `GitHub: ${config.repo}` : 'Salvar no GitHub';
+    }
+
+    function updateLocalProjectUi() {
+      const label = $('#localRepoLabel');
+      if (label) label.textContent = state.projectDirectoryName ? `Projeto: ${state.projectDirectoryName}` : 'Projeto local';
+      const saveButton = $('#btnSaveLocalRepo');
+      if (saveButton) saveButton.disabled = !(state.ast && state.projectDirectoryHandle);
+    }
+
+    async function loadMediaDirectoryFromProject(root, mediaPath = 'media') {
+      try {
+        const directory = await getDirectoryByPath(root, mediaPath, false);
+        const files = await collectFilesFromDirectory(directory);
+        files.forEach(file => registerLocalMediaFile(file, `${mediaPath}/${file.projectRelativePath || file.name}`));
+        const label = $('#mediaFolderLabel');
+        if (label) label.textContent = files.length ? `Mídia local (${files.length})` : 'Pasta de mídia';
+        return files.length;
+      } catch (error) {
+        if (error?.name !== 'NotFoundError') console.warn('Falha ao ler a pasta de mídia:', error);
+        return 0;
+      }
+    }
+
+    async function connectLocalRepository({ load = true } = {}) {
+      if (!supportsLocalRepository()) {
+        toast('Este navegador não permite gravar numa pasta local. Use Chrome ou Edge em HTTPS/localhost.', 'warning', 7000);
+        return false;
+      }
+      try {
+        const handle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'genealogy-local-repository' });
+        if (!await ensureDirectoryPermission(handle, 'readwrite')) throw new Error('Permissão de escrita não concedida.');
+        state.projectDirectoryHandle = handle;
+        state.projectDirectoryName = handle.name;
+        state.projectManifest = null;
+        updateLocalProjectUi();
+        if (load) await loadLocalRepositoryProject(handle);
+        else toast(`Pasta local ligada: ${handle.name}.`);
+        return true;
+      } catch (error) {
+        if (error?.name !== 'AbortError') toast(`Não foi possível abrir o projeto local: ${error.message}`, 'error', 7000);
+        return false;
+      }
+    }
+
+    async function loadLocalRepositoryProject(handle = state.projectDirectoryHandle) {
+      if (!handle) return;
+      setLoading(true, 'A abrir o projeto local…');
+      try {
+        let manifest = null;
+        try {
+          const manifestFile = await readProjectFile(handle, 'project.json');
+          manifest = JSON.parse(await manifestFile.text());
+        } catch (error) {
+          if (error?.name !== 'NotFoundError') console.warn('project.json inválido ou indisponível:', error);
+        }
+        state.projectManifest = manifest;
+        const gedcomPath = manifest?.gedcom || 'data/familia.ged';
+        const mediaPath = (manifest?.media || 'media').replace(/^\.\//, '').replace(/\/$/, '');
+        let gedFile;
+        try {
+          gedFile = await readProjectFile(handle, gedcomPath);
+        } catch (error) {
+          if (error?.name === 'NotFoundError') {
+            updateLocalProjectUi();
+            toast(`Pasta ligada, mas não encontrei ${gedcomPath}. Abra um GEDCOM e clique em “Salvar na pasta”.`, 'warning', 7000);
+            return;
+          }
+          throw error;
+        }
+        const text = await decodeGedFile(gedFile);
+        await loadGedcomText(text, gedFile.name);
+        state.projectDirectoryHandle = handle;
+        state.projectDirectoryName = handle.name;
+        state.projectManifest = manifest;
+        state.settings.mediaBase = './media/';
+        updateGitHubUi();
+        const count = await loadMediaDirectoryFromProject(handle, mediaPath);
+        state.dirty = false;
+        updateLocalProjectUi();
+        updateGitHubUi();
+        updateStatus();
+        renderTree();
+        if (state.selectedId) renderDrawer(state.selectedId);
+        toast(`Projeto local aberto: ${handle.name}${count ? ` · ${count} mídia(s)` : ''}.`);
+      } catch (error) {
+        console.error(error);
+        toast(`Falha ao abrir o projeto local: ${error.message}`, 'error', 8000);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    async function persistReferencedMedia(root) {
+      const mediaDirectory = await getDirectoryByPath(root, 'media', true);
+      const copied = new Set();
+      let copiedCount = 0;
+      for (const person of state.persons.values()) {
+        for (const media of person.media) {
+          const entry = findLocalMediaEntry(media.file);
+          if (!entry?.file) continue;
+          const targetName = sanitizeMediaFileName(fileNameFromPath(media.file) || entry.file.name);
+          const key = normalizeMediaLookupKey(targetName);
+          if (!copied.has(key)) {
+            const targetHandle = await mediaDirectory.getFileHandle(targetName, { create: true });
+            const writable = await targetHandle.createWritable();
+            await writable.write(entry.file);
+            await writable.close();
+            copied.add(key);
+            copiedCount += 1;
+          }
+          setMediaFileReference(media, `./media/${targetName}`);
+        }
+      }
+      return copiedCount;
+    }
+
+    async function saveLocalRepositoryProject() {
+      if (!state.ast) {
+        toast('Abra um GEDCOM antes de salvar o projeto.', 'warning');
+        return;
+      }
+      if (!state.projectDirectoryHandle) {
+        const connected = await connectLocalRepository({ load: false });
+        if (!connected) return;
+      }
+      if (!await ensureDirectoryPermission(state.projectDirectoryHandle, 'readwrite')) {
+        toast('Sem permissão para gravar na pasta selecionada.', 'error');
+        return;
+      }
+      setLoading(true, 'A guardar GEDCOM e mídias no projeto local…');
+      try {
+        const copiedCount = await persistReferencedMedia(state.projectDirectoryHandle);
+        refreshModel(state.selectedId);
+        const gedcomName = 'familia.ged';
+        const gedcomText = serializeGedcom(gedcomName);
+        await writeProjectFile(state.projectDirectoryHandle, `data/${gedcomName}`, gedcomText);
+        const manifest = {
+          schema: 'genealogia-web-project/1.0',
+          title: 'Construção de Genealogia',
+          gedcom: `./data/${gedcomName}`,
+          media: './media/',
+          updatedAt: new Date().toISOString(),
+          sourceFile: state.fileName || gedcomName,
+          autoload: true,
+          ...(state.projectManifest?.github ? { github: state.projectManifest.github } : {})
+        };
+        await writeProjectFile(state.projectDirectoryHandle, 'project.json', JSON.stringify(manifest, null, 2) + '\n');
+        state.projectManifest = manifest;
+        state.fileName = gedcomName;
+        state.dirty = false;
+        updateLocalProjectUi();
+        updateStatus();
+        renderTree();
+        if (state.selectedId) renderDrawer(state.selectedId);
+        toast(`Projeto salvo em ${state.projectDirectoryName}: GEDCOM atualizado${copiedCount ? ` e ${copiedCount} mídia(s) copiada(s)` : ''}.`, 'info', 6500);
+      } catch (error) {
+        console.error(error);
+        toast(`Falha ao salvar o projeto local: ${error.message}`, 'error', 8000);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    function encodeGitHubPath(path = '') {
+      return splitProjectPath(path).map(part => encodeURIComponent(part)).join('/');
+    }
+
+    function bytesToBase64(bytes) {
+      let binary = '';
+      const chunkSize = 0x8000;
+      for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+        binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length)));
+      }
+      return btoa(binary);
+    }
+
+    function textToBase64(text) {
+      return bytesToBase64(new TextEncoder().encode(text));
+    }
+
+    async function githubApiRequest(url, token, options = {}, allowNotFound = false) {
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          Accept: 'application/vnd.github+json',
+          Authorization: `Bearer ${token}`,
+          'X-GitHub-Api-Version': '2026-03-10',
+          ...(options.headers || {})
+        }
+      });
+      if (allowNotFound && response.status === 404) return null;
+      if (!response.ok) {
+        let detail = '';
+        try { detail = (await response.json())?.message || ''; } catch { detail = await response.text(); }
+        if (response.status === 401) throw new Error('Token inválido ou expirado.');
+        if (response.status === 403) throw new Error(`Acesso recusado pelo GitHub. Confirme a permissão Contents: read and write. ${detail}`.trim());
+        if (response.status === 404) throw new Error('Repositório, branch ou ficheiro não encontrado. Confirme os campos e o acesso do token.');
+        throw new Error(`GitHub respondeu HTTP ${response.status}${detail ? `: ${detail}` : ''}`);
+      }
+      if (response.status === 204) return null;
+      return response.json();
+    }
+
+    async function getGitHubFile(owner, repo, path, branch, token) {
+      const encoded = encodeGitHubPath(path);
+      const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${encoded}?ref=${encodeURIComponent(branch)}`;
+      return githubApiRequest(url, token, {}, true);
+    }
+
+    async function putGitHubFile({ owner, repo, path, branch, token, message, contentBase64 }) {
+      const current = await getGitHubFile(owner, repo, path, branch, token);
+      const encoded = encodeGitHubPath(path);
+      const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${encoded}`;
+      const body = { message, content: contentBase64, branch };
+      if (current?.sha) body.sha = current.sha;
+      return githubApiRequest(url, token, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+    }
+
+    function prepareReferencedMediaForRemote(mediaPath = 'media') {
+      const uploads = new Map();
+      const normalizedPath = splitProjectPath(mediaPath).join('/') || 'media';
+      for (const person of state.persons.values()) {
+        for (const media of person.media) {
+          const entry = findLocalMediaEntry(media.file);
+          if (!entry?.file) continue;
+          const targetName = sanitizeMediaFileName(fileNameFromPath(media.file) || entry.file.name);
+          const key = normalizeMediaLookupKey(targetName);
+          if (!uploads.has(key)) uploads.set(key, { name: targetName, file: entry.file });
+          setMediaFileReference(media, `./${normalizedPath}/${targetName}`);
+        }
+      }
+      return [...uploads.values()];
+    }
+
+    function openGitHubDialog() {
+      if (!state.ast) return;
+      const config = inferGitHubRepository();
+      $('#githubOwner').value = config.owner;
+      $('#githubRepo').value = config.repo;
+      $('#githubBranch').value = config.branch;
+      $('#githubGedcomPath').value = config.gedcomPath;
+      $('#githubMediaPath').value = config.mediaPath;
+      $('#githubCommitMessage').value = `Atualiza árvore genealógica (${new Date().toISOString().slice(0, 10)})`;
+      $('#githubToken').value = '';
+      $('#githubUploadMedia').checked = true;
+      updateGitHubDialogSummary();
+      $('#githubDialog').showModal();
+      setTimeout(() => (config.owner && config.repo ? $('#githubToken') : $('#githubOwner')).focus(), 40);
+    }
+
+    function updateGitHubDialogSummary() {
+      const owner = $('#githubOwner')?.value.trim() || 'utilizador';
+      const repo = $('#githubRepo')?.value.trim() || 'repositório';
+      const branch = $('#githubBranch')?.value.trim() || 'main';
+      const gedcomPath = $('#githubGedcomPath')?.value.trim() || 'data/familia.ged';
+      const localMedia = new Set();
+      for (const person of state.persons.values()) for (const media of person.media) if (findLocalMediaEntry(media.file)?.file) localMedia.add(normalizeMediaLookupKey(fileNameFromPath(media.file)));
+      $('#githubRepoSummary').innerHTML = `<strong>${escapeHtml(owner)}/${escapeHtml(repo)}</strong> · branch <strong>${escapeHtml(branch)}</strong><br>GEDCOM: <strong>${escapeHtml(gedcomPath)}</strong> · ${localMedia.size} mídia(s) local(is) disponível(is) para envio.`;
+    }
+
+    async function saveProjectToGitHub() {
+      if (!state.ast || state.githubSaving) return;
+      const owner = $('#githubOwner').value.trim();
+      const repo = $('#githubRepo').value.trim();
+      const branch = $('#githubBranch').value.trim() || 'main';
+      const gedcomPath = splitProjectPath($('#githubGedcomPath').value.trim()).join('/');
+      const mediaPath = splitProjectPath($('#githubMediaPath').value.trim()).join('/') || 'media';
+      const message = $('#githubCommitMessage').value.trim() || 'Atualiza árvore genealógica';
+      const token = $('#githubToken').value.trim();
+      const uploadMedia = $('#githubUploadMedia').checked;
+      if (!owner || !repo || !gedcomPath || !token) throw new Error('Preencha utilizador, repositório, caminho do GEDCOM e token.');
+
+      state.githubSaving = true;
+      updateGitHubUi();
+      setLoading(true, 'A enviar alterações para o GitHub…');
+      try {
+        const mediaUploads = uploadMedia ? prepareReferencedMediaForRemote(mediaPath) : [];
+        refreshModel(state.selectedId);
+        const gedcomName = fileNameFromPath(gedcomPath) || 'familia.ged';
+        const gedcomText = serializeGedcom(gedcomName);
+        let uploaded = 0;
+        for (const item of mediaUploads) {
+          setLoading(true, `A enviar mídia ${uploaded + 1} de ${mediaUploads.length}…`);
+          const bytes = new Uint8Array(await item.file.arrayBuffer());
+          await putGitHubFile({ owner, repo, path: `${mediaPath}/${item.name}`, branch, token, message: `${message} · mídia ${item.name}`, contentBase64: bytesToBase64(bytes) });
+          uploaded += 1;
+        }
+
+        const manifest = {
+          schema: 'genealogia-web-project/1.1',
+          title: state.projectManifest?.title || 'Construção de Genealogia',
+          gedcom: `./${gedcomPath}`,
+          media: `./${mediaPath}/`,
+          updatedAt: new Date().toISOString(),
+          sourceFile: state.fileName || gedcomName,
+          autoload: true,
+          github: { owner, repo, branch }
+        };
+        await putGitHubFile({ owner, repo, path: 'project.json', branch, token, message: `${message} · configura projeto`, contentBase64: textToBase64(JSON.stringify(manifest, null, 2) + '\n') });
+        await putGitHubFile({ owner, repo, path: gedcomPath, branch, token, message, contentBase64: textToBase64(gedcomText) });
+
+        state.projectManifest = manifest;
+        state.fileName = gedcomName;
+        state.dirty = false;
+        $('#githubToken').value = '';
+        $('#githubDialog').close();
+        updateStatus();
+        updateGitHubUi();
+        renderTree();
+        if (state.selectedId) renderDrawer(state.selectedId);
+        toast(`Alterações enviadas para ${owner}/${repo}: GEDCOM atualizado${uploaded ? ` e ${uploaded} mídia(s)` : ''}. O GitHub Pages pode levar alguns minutos para republicar.`, 'info', 9000);
+      } finally {
+        state.githubSaving = false;
+        updateGitHubUi();
+        setLoading(false);
+      }
+    }
+
+    function initials(person) {
+      return person?.name?.display?.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join('') || '?';
+    }
+
+    function yearFromDate(value = '') {
+      const matches = value.match(/\b(\d{3,4})\b/g);
+      return matches?.at(-1) || '';
+    }
+
+    function lifeLabel(person) {
+      const birth = yearFromDate(person?.birth?.date);
+      const death = yearFromDate(person?.death?.date);
+      if (birth || death) return `${birth || '?'} – ${death || ''}`.trim();
+      return person?.death?.exists ? 'Falecido(a)' : 'Datas não informadas';
+    }
+
+    function getParents(personId) {
+      const person = state.persons.get(personId);
+      if (!person) return [];
+      const ids = [];
+      for (const familyId of person.parentFamilyIds) {
+        const family = state.families.get(familyId);
+        if (!family) continue;
+        if (family.husbandId) ids.push(family.husbandId);
+        if (family.wifeId) ids.push(family.wifeId);
+      }
+      return [...new Set(ids)].map(id => state.persons.get(id)).filter(Boolean);
+    }
+
+    function getChildren(personId) {
+      const person = state.persons.get(personId);
+      if (!person) return [];
+      const ids = [];
+      for (const familyId of person.spouseFamilyIds) {
+        const family = state.families.get(familyId);
+        if (family) ids.push(...family.childrenIds);
+      }
+      return [...new Set(ids)].map(id => state.persons.get(id)).filter(Boolean);
+    }
+
+    function getSpouses(personId) {
+      const person = state.persons.get(personId);
+      if (!person) return [];
+      const result = [];
+      for (const familyId of person.spouseFamilyIds) {
+        const family = state.families.get(familyId);
+        if (!family) continue;
+        const spouseId = family.husbandId === personId ? family.wifeId : family.wifeId === personId ? family.husbandId : null;
+        if (spouseId && state.persons.has(spouseId)) result.push({ person: state.persons.get(spouseId), family });
+      }
+      const seen = new Set();
+      return result.filter(item => !seen.has(item.person.id) && seen.add(item.person.id));
+    }
+
+    function getFamilyGroups(personId) {
+      const person = state.persons.get(personId);
+      if (!person) return [];
+      const groups = [];
+      for (const familyId of person.spouseFamilyIds) {
+        const family = state.families.get(familyId);
+        if (!family) continue;
+        const spouseId = family.husbandId === personId ? family.wifeId : family.wifeId === personId ? family.husbandId : null;
+        groups.push({
+          family,
+          spouse: spouseId ? state.persons.get(spouseId) || null : null,
+          children: family.childrenIds.map(id => state.persons.get(id)).filter(Boolean)
+        });
+      }
+      return groups.sort((a, b) => {
+        const aDate = yearFromDate(a.family.marriage.date) || '9999';
+        const bDate = yearFromDate(b.family.marriage.date) || '9999';
+        return aDate.localeCompare(bDate) || (a.spouse?.name.display || '').localeCompare(b.spouse?.name.display || '', 'pt');
+      });
+    }
+
+    function branchRelations(personId, side) {
+      return side === 'ancestors' ? getParents(personId) : getChildren(personId);
+    }
+
+    function expandGenerations(personId, side, generations = 2) {
+      const set = side === 'ancestors' ? state.expandedAncestors : state.expandedDescendants;
+      let frontier = [personId];
+      for (let depth = 0; depth < generations; depth++) {
+        const next = [];
+        for (const id of frontier) {
+          set.add(id);
+          branchRelations(id, side).forEach(person => next.push(person.id));
+        }
+        frontier = [...new Set(next)];
+      }
+    }
+
+    function buildBranch(personId, side, depth = 0, path = []) {
+      const person = state.persons.get(personId);
+      if (!person) return null;
+      const relationPeople = branchRelations(personId, side);
+      const expandedSet = side === 'ancestors' ? state.expandedAncestors : state.expandedDescendants;
+      const canExpand = depth < state.settings.maxDepth && expandedSet.has(personId);
+      const nextPath = [...path, personId];
+      const children = canExpand
+        ? relationPeople.filter(relative => !nextPath.includes(relative.id)).map(relative => buildBranch(relative.id, side, depth + 1, nextPath)).filter(Boolean)
+        : [];
+      return {
+        id: personId,
+        person,
+        side,
+        depth,
+        relationCount: relationPeople.length,
+        hasRelations: relationPeople.length > 0,
+        expanded: expandedSet.has(personId),
+        children,
+        key: `${side}:${nextPath.join('>')}`
+      };
+    }
+
+    function buildFamilyDescendantBranch(personId, depth = 0, path = []) {
+      const person = state.persons.get(personId);
+      if (!person) return null;
+      const canExpand = depth < state.settings.maxDepth && state.expandedDescendants.has(personId);
+      const nextPath = [...path, personId];
+      const familyGroups = getFamilyGroups(personId);
+      const children = canExpand ? familyGroups.map(({ family, spouse, children: familyChildren }) => {
+        const collapsed = state.collapsedFamilies.has(family.id);
+        const childNodes = collapsed ? [] : familyChildren
+          .filter(child => !nextPath.includes(child.id))
+          .map(child => buildFamilyDescendantBranch(child.id, depth + 1, nextPath))
+          .filter(Boolean);
+        return {
+          id: spouse?.id || `family:${family.id}`,
+          person: spouse,
+          family,
+          familyId: family.id,
+          nodeType: 'spouse',
+          side: 'descendants',
+          depth,
+          relationCount: familyChildren.length,
+          hasRelations: familyChildren.length > 0,
+          expanded: !collapsed,
+          children: childNodes,
+          key: `family:${family.id}:${nextPath.join('>')}`
+        };
+      }) : [];
+      return {
+        id: personId,
+        person,
+        nodeType: 'person',
+        side: 'descendants',
+        depth,
+        relationCount: getChildren(personId).length,
+        hasRelations: familyGroups.length > 0,
+        expanded: state.expandedDescendants.has(personId),
+        children,
+        key: `descendants-family:${nextPath.join('>')}`
+      };
+    }
+
+    function isVerticalOrientation() {
+      return ['verticalFamily', 'descendants', 'ancestors'].includes(state.orientation);
+    }
+
+    function horizontalLayout(data, direction) {
+      const root = d3.hierarchy(data, item => item.children);
+      d3.tree().nodeSize([CARD_H + 52, CARD_W + 135])(root);
+      const nodes = root.descendants().map(node => ({
+        ...node.data,
+        px: direction * node.y,
+        py: node.x,
+        layoutDepth: node.depth
+      }));
+      const links = root.links().map(link => ({
+        side: data.side,
+        kind: link.target.data.nodeType === 'spouse' ? 'union' : link.source.data.nodeType === 'spouse' ? 'child-link' : '',
+        source: { px: direction * link.source.y, py: link.source.x },
+        target: { px: direction * link.target.y, py: link.target.x },
+        key: `${link.source.data.key}::${link.target.data.key}`
+      }));
+      return { nodes, links };
+    }
+
+    function verticalLayout(data, direction = 1) {
+      const root = d3.hierarchy(data, item => item.children);
+      d3.tree().nodeSize([CARD_W + 74, CARD_H + 104])(root);
+      return {
+        nodes: root.descendants().map(node => ({ ...node.data, px: node.x, py: direction * node.y, layoutDepth: node.depth })),
+        links: root.links().map(link => ({
+          side: data.side,
+          kind: link.target.data.nodeType === 'spouse' ? 'union' : link.source.data.nodeType === 'spouse' ? 'child-link' : '',
+          source: { px: link.source.x, py: direction * link.source.y },
+          target: { px: link.target.x, py: direction * link.target.y },
+          key: `${link.source.data.key}::${link.target.data.key}`
+        }))
+      };
+    }
+
+    function computeLayout() {
+      const ancestorData = buildBranch(state.rootId, 'ancestors');
+      const descendantData = buildFamilyDescendantBranch(state.rootId);
+      if (state.orientation === 'descendants') return verticalLayout(descendantData, 1);
+      if (state.orientation === 'ancestors') return verticalLayout(ancestorData, -1);
+      if (state.orientation === 'verticalFamily') {
+        const ancestors = verticalLayout(ancestorData, -1);
+        const descendants = verticalLayout(descendantData, 1);
+        return {
+          nodes: [...ancestors.nodes.filter(node => node.layoutDepth > 0), ...descendants.nodes],
+          links: [...ancestors.links, ...descendants.links]
+        };
+      }
+
+      const ancestors = horizontalLayout(ancestorData, -1);
+      const descendants = horizontalLayout(descendantData, 1);
+      return {
+        nodes: [...ancestors.nodes.filter(node => node.layoutDepth > 0), ...descendants.nodes],
+        links: [...ancestors.links, ...descendants.links]
+      };
+    }
+
+    function linkPath(link) {
+      const { source: s, target: t } = link;
+      if (isVerticalOrientation()) {
+        const mid = (s.py + t.py) / 2;
+        return `M${s.px},${s.py} C${s.px},${mid} ${t.px},${mid} ${t.px},${t.py}`;
+      }
+      const mid = (s.px + t.px) / 2;
+      return `M${s.px},${s.py} C${mid},${s.py} ${mid},${t.py} ${t.px},${t.py}`;
+    }
+
+    function makePhotoElement(person, className = 'person-photo') {
+      const holder = document.createElement('div');
+      holder.className = className;
+      const media = primaryMedia(person);
+      if (media) {
+        const img = document.createElement('img');
+        img.alt = `Foto de ${person.name.display}`;
+        img.loading = 'lazy';
+        applyImageFallback(img, mediaCandidates(media));
+        holder.appendChild(img);
+      } else {
+        holder.textContent = initials(person);
+      }
+      return holder;
+    }
+
+    function createPersonCard(node) {
+      const person = node.person || null;
+      const isSpouseNode = node.nodeType === 'spouse';
+      const selected = person && person.id === state.selectedId;
+      const isRoot = person && person.id === state.rootId && !isSpouseNode;
+      const card = document.createElement('div');
+      card.className = `person-card ${selected ? 'selected' : ''} ${isRoot ? 'root' : ''} ${isSpouseNode ? 'spouse-node' : ''} ${!person ? 'placeholder' : ''}`;
+      card.setAttribute('role', person ? 'button' : 'group');
+      if (person) card.setAttribute('tabindex', '0');
+      card.setAttribute('aria-label', person ? `Abrir ${person.name.display}` : 'Cônjuge não identificado');
+
+      if (!isSpouseNode && person) {
+        const parentCount = getParents(person.id).length;
+        const childCount = getChildren(person.id).length;
+        const vertical = isVerticalOrientation();
+
+        if (parentCount) {
+          const ancestorButton = document.createElement('button');
+          ancestorButton.type = 'button';
+          ancestorButton.className = `branch-toggle ${vertical ? 'top' : 'left'} ${state.expandedAncestors.has(person.id) ? 'expanded' : ''}`;
+          ancestorButton.title = state.expandedAncestors.has(person.id) ? 'Colapsar antepassados' : 'Expandir antepassados';
+          ancestorButton.textContent = state.expandedAncestors.has(person.id) ? '−' : vertical ? `↑${parentCount}` : `←${parentCount}`;
+          ancestorButton.addEventListener('click', event => {
+            event.stopPropagation();
+            toggleBranch(person.id, 'ancestors');
+          });
+          card.appendChild(ancestorButton);
+        }
+
+        if (childCount) {
+          const descendantButton = document.createElement('button');
+          descendantButton.type = 'button';
+          descendantButton.className = `branch-toggle ${vertical ? 'bottom' : 'right'} ${state.expandedDescendants.has(person.id) ? 'expanded' : ''}`;
+          descendantButton.title = state.expandedDescendants.has(person.id) ? 'Colapsar famílias e descendentes' : 'Expandir famílias e descendentes';
+          descendantButton.textContent = state.expandedDescendants.has(person.id) ? '−' : vertical ? `${childCount}↓` : `${childCount}→`;
+          descendantButton.addEventListener('click', event => {
+            event.stopPropagation();
+            toggleBranch(person.id, 'descendants');
+          });
+          card.appendChild(descendantButton);
+        }
+      }
+
+      if (isSpouseNode && node.relationCount) {
+        const vertical = isVerticalOrientation();
+        const familyButton = document.createElement('button');
+        familyButton.type = 'button';
+        familyButton.className = `branch-toggle ${vertical ? 'bottom' : 'right'} ${node.expanded ? 'expanded' : ''}`;
+        familyButton.title = node.expanded ? 'Ocultar filhos desta união' : 'Mostrar filhos desta união';
+        familyButton.textContent = node.expanded ? '−' : vertical ? `${node.relationCount}↓` : `${node.relationCount}→`;
+        familyButton.addEventListener('click', event => {
+          event.stopPropagation();
+          toggleFamilyBranch(node.familyId);
+        });
+        card.appendChild(familyButton);
+      }
+
+      if (person) card.appendChild(makePhotoElement(person));
+      else {
+        const holder = document.createElement('div');
+        holder.className = 'person-photo';
+        holder.textContent = '?';
+        card.appendChild(holder);
+      }
+
+      const text = document.createElement('div');
+      const name = document.createElement('div');
+      name.className = 'person-name';
+      name.textContent = person?.name.display || 'Cônjuge não identificado';
+      const life = document.createElement('div');
+      life.className = 'person-life';
+      if (isSpouseNode && node.family?.marriage?.date) life.textContent = `Casamento: ${node.family.marriage.date}`;
+      else life.textContent = person ? lifeLabel(person) : `Unidade familiar ${node.familyId || ''}`;
+      const place = document.createElement('div');
+      place.className = 'person-place';
+      if (isSpouseNode && node.family?.marriage?.place) place.textContent = node.family.marriage.place;
+      else place.textContent = person?.birth.place || person?.death.place || person?.occupation || (isSpouseNode ? `${node.relationCount || 0} filho(s) nesta união` : 'Local não informado');
+      text.append(name, life, place);
+      card.appendChild(text);
+
+      const flags = document.createElement('div');
+      flags.className = 'person-flags';
+      if (isSpouseNode) {
+        const familyFlag = document.createElement('span');
+        familyFlag.className = 'person-flag';
+        familyFlag.textContent = `Família · ${node.relationCount || 0} filho(s)`;
+        flags.appendChild(familyFlag);
+      } else if (person) {
+        if (person.media.length) {
+          const mediaFlag = document.createElement('span');
+          mediaFlag.className = 'person-flag';
+          mediaFlag.textContent = `▧ ${person.media.length}`;
+          flags.appendChild(mediaFlag);
+        }
+        if (person.sourceCount) {
+          const sourceFlag = document.createElement('span');
+          sourceFlag.className = 'person-flag';
+          sourceFlag.textContent = `S ${person.sourceCount}`;
+          flags.appendChild(sourceFlag);
+        }
+      }
+      card.appendChild(flags);
+
+      if (person) {
+        const activate = () => focusPerson(person.id, true);
+        card.addEventListener('click', activate);
+        card.addEventListener('keydown', event => {
+          if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activate(); }
+        });
+      }
+      return card;
+    }
+
+    function renderTree({ fit = false, center = false } = {}) {
+      if (!state.rootId || !state.persons.size) return;
+      if (!window.d3) {
+        toast('A biblioteca D3 não foi carregada. Verifique a ligação à Internet ou forneça uma cópia local.', 'error', 7000);
+        return;
+      }
+
+      const layout = computeLayout();
+      state.lastLayout = layout;
+      const viewport = d3.select('#treeViewport');
+      viewport.selectAll('*').remove();
+
+      viewport.append('g')
+        .attr('class', 'links-layer')
+        .selectAll('path')
+        .data(layout.links, link => link.key)
+        .join('path')
+        .attr('class', link => `tree-link ${link.side === 'ancestors' ? 'ancestor' : 'descendant'} ${link.kind || ''}`)
+        .attr('d', linkPath);
+
+      const nodes = viewport.append('g')
+        .attr('class', 'nodes-layer')
+        .selectAll('g.person-node')
+        .data(layout.nodes, node => node.key)
+        .join('g')
+        .attr('class', 'person-node')
+        .attr('transform', node => `translate(${node.px},${node.py})`);
+
+      nodes.each(function(node) {
+        const group = d3.select(this);
+        const foreign = group.append('foreignObject')
+          .attr('x', -CARD_W / 2)
+          .attr('y', -CARD_H / 2)
+          .attr('width', CARD_W)
+          .attr('height', CARD_H)
+          .node();
+        foreign.appendChild(createPersonCard(node));
+      });
+
+      requestAnimationFrame(() => {
+        if (fit) fitTree();
+        else if (center) centerRoot();
+      });
+    }
+
+    function toggleBranch(personId, side) {
+      const set = side === 'ancestors' ? state.expandedAncestors : state.expandedDescendants;
+      if (set.has(personId)) set.delete(personId);
+      else set.add(personId);
+      renderTree();
+      if (state.selectedId) renderDrawer(state.selectedId);
+    }
+
+    function toggleFamilyBranch(familyId) {
+      if (!familyId) return;
+      if (state.collapsedFamilies.has(familyId)) state.collapsedFamilies.delete(familyId);
+      else state.collapsedFamilies.add(familyId);
+      renderTree();
+      if (state.selectedId) renderDrawer(state.selectedId);
+    }
+
+    function focusPerson(personId, toggleWhenAlreadyFocused = false) {
+      if (!state.persons.has(personId)) return;
+      const alreadyFocused = state.rootId === personId;
+      state.rootId = personId;
+      state.selectedId = personId;
+
+      if (alreadyFocused && toggleWhenAlreadyFocused) {
+        const open = state.expandedAncestors.has(personId) || state.expandedDescendants.has(personId);
+        if (open) {
+          state.expandedAncestors.delete(personId);
+          state.expandedDescendants.delete(personId);
+        } else {
+          expandGenerations(personId, 'ancestors', state.settings.initialGenerations);
+          expandGenerations(personId, 'descendants', state.settings.initialGenerations);
+        }
+      } else {
+        expandGenerations(personId, 'ancestors', state.settings.initialGenerations);
+        expandGenerations(personId, 'descendants', state.settings.initialGenerations);
+      }
+
+      renderTree({ center: true });
+      openDrawer(personId);
+    }
+
+    function initZoom() {
+      const svg = d3.select('#treeSvg');
+      state.zoom = d3.zoom()
+        .scaleExtent([0.12, 2.7])
+        .on('zoom', event => d3.select('#treeViewport').attr('transform', event.transform));
+      svg.call(state.zoom).on('dblclick.zoom', null);
+    }
+
+    function centerRoot(scale = null) {
+      if (!state.zoom) return;
+      const svgNode = $('#treeSvg');
+      const width = svgNode.clientWidth;
+      const height = svgNode.clientHeight;
+      const current = d3.zoomTransform(svgNode);
+      const targetScale = scale ?? current.k ?? 1;
+      d3.select(svgNode).transition().duration(420).call(
+        state.zoom.transform,
+        d3.zoomIdentity.translate(width / 2, height / 2).scale(targetScale)
+      );
+    }
+
+    function fitTree() {
+      if (!state.zoom) return;
+      const group = $('#treeViewport');
+      const svgNode = $('#treeSvg');
+      let box;
+      try { box = group.getBBox(); } catch { centerRoot(.75); return; }
+      if (!box.width || !box.height) { centerRoot(.75); return; }
+      const width = svgNode.clientWidth;
+      const height = svgNode.clientHeight;
+      const scale = Math.max(.12, Math.min(1.15, .88 / Math.max(box.width / width, box.height / height)));
+      const tx = width / 2 - scale * (box.x + box.width / 2);
+      const ty = height / 2 - scale * (box.y + box.height / 2);
+      d3.select(svgNode).transition().duration(520).call(state.zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
+    }
+
+    function zoomBy(factor) {
+      if (!state.zoom) return;
+      d3.select('#treeSvg').transition().duration(240).call(state.zoom.scaleBy, factor);
+    }
+
+    function setDrawerTab(tabName) {
+      $$('.drawer-tab').forEach(tab => tab.classList.toggle('active', tab.dataset.tab === tabName));
+      $$('.tab-panel').forEach(panel => panel.classList.toggle('active', panel.id === `tab-${tabName}`));
+    }
+
+    function openDrawer(personId) {
+      state.selectedId = personId;
+      renderDrawer(personId);
+      $('#drawer').classList.add('open');
+      $('#drawer').setAttribute('aria-hidden', 'false');
+      renderTree();
+    }
+
+    function closeDrawer() {
+      $('#drawer').classList.remove('open');
+      $('#drawer').setAttribute('aria-hidden', 'true');
+    }
+
+    function fillAvatar(container, person) {
+      container.replaceChildren();
+      const media = primaryMedia(person);
+      if (media) {
+        const img = document.createElement('img');
+        img.alt = `Foto de ${person.name.display}`;
+        applyImageFallback(img, mediaCandidates(media));
+        container.appendChild(img);
+      } else container.textContent = initials(person);
+    }
+
+    function renderDrawer(personId) {
+      const person = state.persons.get(personId);
+      if (!person) return;
+      const parents = getParents(personId);
+      const spouses = getSpouses(personId);
+      const children = getChildren(personId);
+
+      $('#drawerTitle').textContent = person.name.display;
+      $('#drawerSubtitle').textContent = `${lifeLabel(person)} · ${person.id}`;
+      fillAvatar($('#drawerAvatar'), person);
+
+      $('#personStats').innerHTML = `
+        <div class="mini-stat"><strong>${parents.length}</strong><span>pais</span></div>
+        <div class="mini-stat"><strong>${spouses.length}</strong><span>cônjuges</span></div>
+        <div class="mini-stat"><strong>${children.length}</strong><span>filhos</span></div>`;
+
+      $('#fieldGiven').value = person.name.given || '';
+      $('#fieldSurname').value = person.name.surname || '';
+      $('#fieldSex').value = ['M','F','X','U'].includes(person.sex) ? person.sex : 'U';
+      $('#fieldOccupation').value = person.occupation || '';
+      $('#fieldBirthDate').value = person.birth.date || '';
+      $('#fieldBirthPlace').value = person.birth.place || '';
+      $('#fieldDeceased').checked = person.death.exists;
+      $('#fieldDeathDate').value = person.death.date || '';
+      $('#fieldDeathPlace').value = person.death.place || '';
+      $('#fieldBiography').value = person.biography || '';
+
+      renderMediaGallery(person);
+      renderRelationLists(person, parents);
+    }
+
+    function renderMediaGallery(person) {
+      const gallery = $('#mediaGallery');
+      gallery.replaceChildren();
+      if (!person.media.length) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-list';
+        empty.style.gridColumn = '1 / -1';
+        empty.textContent = 'Nenhuma mídia associada a esta pessoa.';
+        gallery.appendChild(empty);
+        return;
+      }
+
+      person.media.forEach(media => {
+        const card = document.createElement('div');
+        card.className = 'media-card';
+        const button = document.createElement('button');
+        button.type = 'button';
+        const candidates = mediaCandidates(media);
+        button.addEventListener('click', () => window.open(candidates[0] || media.file, '_blank', 'noopener'));
+
+        if (media.image) {
+          const img = document.createElement('img');
+          img.alt = media.title;
+          img.loading = 'lazy';
+          applyImageFallback(img, candidates);
+          button.appendChild(img);
+        } else {
+          const doc = document.createElement('div');
+          doc.className = 'doc-card';
+          const icon = document.createElement('div');
+          icon.className = 'doc-icon';
+          icon.textContent = media.format === 'pdf' ? 'PDF' : '▤';
+          const text = document.createElement('div');
+          text.innerHTML = `<strong style="font-size:11px">${escapeHtml(media.title)}</strong><div style="font-size:9px;color:#98a2b3;margin-top:3px">${escapeHtml(media.format.toUpperCase() || 'FICHEIRO')}</div>`;
+          doc.append(icon, text);
+          button.appendChild(doc);
+        }
+
+        const caption = document.createElement('div');
+        caption.className = 'media-caption';
+        caption.textContent = `${media.primary ? '★ ' : ''}${media.title}`;
+        button.appendChild(caption);
+        card.appendChild(button);
+        gallery.appendChild(card);
+      });
+    }
+
+    function escapeHtml(value = '') {
+      return String(value).replace(/[&<>'"]/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[char]));
+    }
+
+    function relationButton(person, meta = '') {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'relation-item';
+      const initial = document.createElement('span');
+      initial.className = 'relation-initial';
+      initial.textContent = initials(person);
+      const text = document.createElement('span');
+      const name = document.createElement('span');
+      name.className = 'relation-name';
+      name.textContent = person.name.display;
+      const detail = document.createElement('span');
+      detail.className = 'relation-meta';
+      detail.style.display = 'block';
+      detail.textContent = meta || lifeLabel(person);
+      text.append(name, detail);
+      button.append(initial, text);
+      button.addEventListener('click', () => focusPerson(person.id));
+      return button;
+    }
+
+    function renderList(container, entries, mapEntry, emptyMessage) {
+      container.replaceChildren();
+      if (!entries.length) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-list';
+        empty.textContent = emptyMessage;
+        container.appendChild(empty);
+        return;
+      }
+      entries.forEach(entry => container.appendChild(mapEntry(entry)));
+    }
+
+    function renderFamilyGroups(personId) {
+      const container = $('#familyGroupsList');
+      container.replaceChildren();
+      const groups = getFamilyGroups(personId);
+      if (!groups.length) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-list';
+        empty.textContent = 'Nenhuma unidade familiar informada.';
+        container.appendChild(empty);
+        return;
+      }
+
+      groups.forEach(({ family, spouse, children }) => {
+        const card = document.createElement('div');
+        card.className = 'family-group-card';
+        const head = document.createElement('div');
+        head.className = 'family-group-head';
+        const initial = document.createElement('span');
+        initial.className = 'relation-initial';
+        initial.textContent = spouse ? initials(spouse) : '?';
+        const title = document.createElement('div');
+        const name = document.createElement('div');
+        name.className = 'family-group-title';
+        name.textContent = spouse?.name.display || 'Cônjuge não identificado';
+        const meta = document.createElement('div');
+        meta.className = 'family-group-meta';
+        const marriage = [family.marriage.date, family.marriage.place].filter(Boolean).join(' · ');
+        meta.textContent = marriage ? `Casamento: ${marriage}` : `${children.length} filho(s) nesta união`;
+        title.append(name, meta);
+        head.append(initial, title);
+        if (spouse) {
+          head.style.cursor = 'pointer';
+          head.addEventListener('click', () => focusPerson(spouse.id));
+        }
+        card.appendChild(head);
+
+        const childList = document.createElement('div');
+        childList.className = 'family-children';
+        if (!children.length) {
+          const empty = document.createElement('div');
+          empty.className = 'empty-list';
+          empty.textContent = 'Sem filhos registados nesta união.';
+          childList.appendChild(empty);
+        } else {
+          children.forEach(child => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'family-child-button';
+            button.textContent = `↳ ${child.name.display} · ${lifeLabel(child)}`;
+            button.addEventListener('click', () => focusPerson(child.id));
+            childList.appendChild(button);
+          });
+        }
+        card.appendChild(childList);
+        container.appendChild(card);
+      });
+    }
+
+    function renderRelationLists(person, parents) {
+      renderList($('#parentsList'), parents, item => relationButton(item), 'Pais não informados.');
+      renderFamilyGroups(person.id);
+    }
+
+    function ensureDirectChild(parent, tag, value = '') {
+      let node = directChild(parent, tag);
+      if (!node) {
+        node = makeNode(parent.level + 1, tag, value);
+        parent.children.push(node);
+      }
+      return node;
+    }
+
+    function setDirectValue(parent, tag, value, { removeWhenEmpty = true } = {}) {
+      const clean = String(value ?? '').trim();
+      const existing = directChild(parent, tag);
+      if (!clean && removeWhenEmpty) {
+        if (existing) parent.children = parent.children.filter(child => child !== existing);
+        return null;
+      }
+      const node = existing || ensureDirectChild(parent, tag, clean);
+      node.value = clean;
+      node.children = node.children.filter(child => !['CONC','CONT'].includes(child.tag));
+      return node;
+    }
+
+    function setMultilineValue(parent, tag, text) {
+      parent.children = parent.children.filter(child => child.tag !== tag);
+      const lines = String(text ?? '').replace(/\r\n?/g, '\n').split('\n');
+      if (!lines.some(line => line.trim())) return null;
+      const node = makeNode(parent.level + 1, tag, lines.shift() || '');
+      lines.forEach(line => node.children.push(makeNode(node.level + 1, 'CONT', line)));
+      parent.children.push(node);
+      return node;
+    }
+
+    function setEvent(record, tag, { date = '', place = '', exists = false } = {}) {
+      let event = directChild(record, tag);
+      const shouldExist = exists || Boolean(date.trim() || place.trim());
+      if (!shouldExist) {
+        if (event) record.children = record.children.filter(child => child !== event);
+        return;
+      }
+      if (!event) {
+        event = makeNode(record.level + 1, tag, exists ? 'Y' : '');
+        record.children.push(event);
+      }
+      if (tag === 'DEAT') event.value = exists ? 'Y' : event.value;
+      setDirectValue(event, 'DATE', date);
+      setDirectValue(event, 'PLAC', place);
+    }
+
+    function formatGedName(given, surname) {
+      const g = String(given || '').trim();
+      const s = String(surname || '').trim();
+      return s ? `${g} /${s}/`.trim() : g;
+    }
+
+    function updatePersonRecord(personId, values) {
+      const person = state.persons.get(personId);
+      if (!person) throw new Error('Pessoa não encontrada.');
+      const record = person.record;
+      const nameNode = ensureDirectChild(record, 'NAME');
+      nameNode.value = formatGedName(values.given, values.surname);
+      setDirectValue(nameNode, 'GIVN', values.given);
+      setDirectValue(nameNode, 'SURN', values.surname);
+      setDirectValue(record, 'SEX', values.sex || 'U', { removeWhenEmpty: false });
+      setDirectValue(record, 'OCCU', values.occupation);
+      setEvent(record, 'BIRT', { date: values.birthDate, place: values.birthPlace, exists: Boolean(values.birthDate || values.birthPlace) });
+      setEvent(record, 'DEAT', { date: values.deathDate, place: values.deathPlace, exists: values.deceased });
+      setMultilineValue(record, 'NOTE', values.biography);
+    }
+
+    function normalizeLevels(node, level = 0) {
+      node.level = level;
+      node.children.forEach(child => normalizeLevels(child, level + 1));
+    }
+
+    function refreshModel(keepId = state.selectedId) {
+      buildModel(state.ast);
+      if (keepId && state.persons.has(keepId)) state.selectedId = keepId;
+      if (!state.persons.has(state.rootId)) state.rootId = state.persons.keys().next().value || null;
+      updateStatus();
+    }
+
+    function addMediaToPerson(personId, file, title, primary) {
+      const person = state.persons.get(personId);
+      if (!person) return;
+      const primaryTags = ['_PRIM','_PRIMARY','_PERSONALPHOTO','_PRIM_CUTOUT','_PROFILE'];
+      if (primary) {
+        directChildren(person.record, 'OBJE').forEach(obje => {
+          const source = /^@.+@$/.test(obje.value.trim()) ? state.recordIndex.get(obje.value.trim()) : obje;
+          [obje, source].filter(Boolean).forEach(node => primaryTags.forEach(tag => setDirectValue(node, tag, '', { removeWhenEmpty: true })));
+        });
+      }
+      const obje = makeNode(person.record.level + 1, 'OBJE');
+      const fileNode = makeNode(obje.level + 1, 'FILE', file.trim());
+      const format = extensionFromPath(file) || 'file';
+      fileNode.children.push(makeNode(fileNode.level + 1, 'FORM', format));
+      if (title.trim()) fileNode.children.push(makeNode(fileNode.level + 1, 'TITL', title.trim()));
+      obje.children.push(fileNode);
+      if (primary) {
+        obje.children.push(makeNode(obje.level + 1, '_PRIM', 'Y'));
+        obje.children.push(makeNode(obje.level + 1, '_PERSONALPHOTO', 'Y'));
+      }
+      person.record.children.push(obje);
+    }
+
+    function nextXref(prefix) {
+      let max = 0;
+      const regex = new RegExp(`^@${prefix}(\\d+)@$`, 'i');
+      for (const id of state.recordIndex.keys()) {
+        const match = id.match(regex);
+        if (match) max = Math.max(max, Number(match[1]));
+      }
+      let candidate = `@${prefix}${max + 1}@`;
+      while (state.recordIndex.has(candidate)) candidate = `@${prefix}${++max + 1}@`;
+      return candidate;
+    }
+
+    function insertBeforeTrailer(record) {
+      const trailerIndex = state.ast.records.findIndex(item => item.tag === 'TRLR');
+      if (trailerIndex >= 0) state.ast.records.splice(trailerIndex, 0, record);
+      else state.ast.records.push(record);
+    }
+
+    function addReference(record, tag, pointer) {
+      const exists = directChildren(record, tag).some(node => nodeText(node) === pointer);
+      if (!exists) record.children.push(makeNode(record.level + 1, tag, pointer));
+    }
+
+    function createPersonRecord(values) {
+      const id = nextXref('I');
+      const record = makeNode(0, 'INDI', '', id);
+      record.children.push(makeNode(1, 'NAME', formatGedName(values.given, values.surname), null, [
+        makeNode(2, 'GIVN', values.given || ''),
+        makeNode(2, 'SURN', values.surname || '')
+      ].filter(node => node.value)));
+      record.children.push(makeNode(1, 'SEX', values.sex || 'U'));
+      if (values.birthDate || values.birthPlace) {
+        const birth = makeNode(1, 'BIRT');
+        if (values.birthDate) birth.children.push(makeNode(2, 'DATE', values.birthDate));
+        if (values.birthPlace) birth.children.push(makeNode(2, 'PLAC', values.birthPlace));
+        record.children.push(birth);
+      }
+      record.children.push(makeNode(1, '_UID', crypto.randomUUID().replace(/-/g, '').toUpperCase()));
+      insertBeforeTrailer(record);
+      return { id, record };
+    }
+
+    function createFamilyRecord() {
+      const id = nextXref('F');
+      const record = makeNode(0, 'FAM', '', id);
+      record.children.push(makeNode(1, '_UID', crypto.randomUUID().replace(/-/g, '').toUpperCase()));
+      insertBeforeTrailer(record);
+      return { id, record };
+    }
+
+    function setFamilyRole(familyRecord, role, personId) {
+      setDirectValue(familyRecord, role, personId, { removeWhenEmpty: false });
+    }
+
+    function addChildToFamily(familyRecord, childId) {
+      if (!directChildren(familyRecord, 'CHIL').some(node => nodeText(node) === childId)) {
+        familyRecord.children.push(makeNode(1, 'CHIL', childId));
+      }
+    }
+
+    function familyWithAvailableParentRole(personId, role) {
+      const person = state.persons.get(personId);
+      if (!person) return null;
+      for (const familyId of person.parentFamilyIds) {
+        const family = state.families.get(familyId);
+        if (family && !directValue(family.record, role)) return family;
+      }
+      return null;
+    }
+
+    function attachNewRelative(targetId, newId, type, familyChoice = '') {
+      const target = state.persons.get(targetId);
+      const newRecord = state.ast.records.find(record => record.xref === newId);
+      if (!target || !newRecord) throw new Error('Não foi possível criar a relação.');
+
+      if (type === 'father' || type === 'mother') {
+        const role = type === 'father' ? 'HUSB' : 'WIFE';
+        let family = familyWithAvailableParentRole(targetId, role);
+        if (!family) {
+          const created = createFamilyRecord();
+          family = { id: created.id, record: created.record };
+          addChildToFamily(family.record, targetId);
+          addReference(target.record, 'FAMC', family.id);
+        }
+        setFamilyRole(family.record, role, newId);
+        addReference(newRecord, 'FAMS', family.id);
+        addReference(target.record, 'FAMC', family.id);
+        return;
+      }
+
+      if (type === 'spouse') {
+        const family = createFamilyRecord();
+        const targetRole = target.sex === 'F' ? 'WIFE' : 'HUSB';
+        const newRole = targetRole === 'HUSB' ? 'WIFE' : 'HUSB';
+        setFamilyRole(family.record, targetRole, targetId);
+        setFamilyRole(family.record, newRole, newId);
+        addReference(target.record, 'FAMS', family.id);
+        addReference(newRecord, 'FAMS', family.id);
+        return;
+      }
+
+      if (type === 'child') {
+        let familyRecord = familyChoice ? state.families.get(familyChoice)?.record : null;
+        let familyId = familyChoice;
+        if (!familyRecord) {
+          const family = createFamilyRecord();
+          familyRecord = family.record;
+          familyId = family.id;
+          const targetRole = target.sex === 'F' ? 'WIFE' : 'HUSB';
+          setFamilyRole(familyRecord, targetRole, targetId);
+          addReference(target.record, 'FAMS', familyId);
+        }
+        addChildToFamily(familyRecord, newId);
+        addReference(newRecord, 'FAMC', familyId);
+      }
+    }
+
+    function openRelativeDialog(type) {
+      if (!state.selectedId) return;
+      const titles = { father: 'Adicionar pai', mother: 'Adicionar mãe', spouse: 'Adicionar cônjuge / parceiro', child: 'Adicionar filho(a)' };
+      $('#relativeType').value = type;
+      $('#relativeDialogTitle').textContent = titles[type] || 'Adicionar familiar';
+      $('#relativeForm').reset();
+      $('#relativeType').value = type;
+      $('#relativeSex').value = type === 'father' ? 'M' : type === 'mother' ? 'F' : 'U';
+      const familyField = $('#relativeFamilyField');
+      familyField.style.display = type === 'child' ? '' : 'none';
+      if (type === 'child') populateFamilyChoices(state.selectedId);
+      $('#relativeDialog').showModal();
+      setTimeout(() => $('#relativeGiven').focus(), 40);
+    }
+
+    function populateFamilyChoices(personId) {
+      const select = $('#relativeFamily');
+      select.replaceChildren();
+      const newOption = new Option('Criar nova unidade familiar', '');
+      select.appendChild(newOption);
+      const person = state.persons.get(personId);
+      if (!person) return;
+      for (const familyId of person.spouseFamilyIds) {
+        const family = state.families.get(familyId);
+        if (!family) continue;
+        const spouseId = family.husbandId === personId ? family.wifeId : family.wifeId === personId ? family.husbandId : null;
+        const spouseName = state.persons.get(spouseId)?.name.display || 'sem cônjuge informado';
+        select.appendChild(new Option(`Família com ${spouseName}`, familyId));
+      }
+    }
+
+    function removeDirectReferences(record, tag, pointer) {
+      if (!record) return;
+      record.children = record.children.filter(child => !(child.tag === tag && nodeText(child) === pointer));
+    }
+
+    function removeFamilyRecord(familyId) {
+      const family = state.families.get(familyId);
+      const record = family?.record || state.ast.records.find(item => item.tag === 'FAM' && item.xref === familyId);
+      if (!record) return false;
+      for (const person of state.persons.values()) {
+        removeDirectReferences(person.record, 'FAMS', familyId);
+        removeDirectReferences(person.record, 'FAMC', familyId);
+      }
+      state.ast.records = state.ast.records.filter(item => item !== record);
+      state.collapsedFamilies.delete(familyId);
+      return true;
+    }
+
+    function familyHasUsefulRelation(record) {
+      const spouses = ['HUSB','WIFE'].filter(tag => Boolean(directValue(record, tag))).length;
+      const children = directChildren(record, 'CHIL').filter(node => Boolean(nodeText(node))).length;
+      return children > 0 || spouses >= 2;
+    }
+
+    function openDeletePersonDialog() {
+      const person = state.persons.get(state.selectedId);
+      if (!person) return;
+      $('#deletePersonId').value = person.id;
+      const familyCount = new Set([...person.spouseFamilyIds, ...person.parentFamilyIds]).size;
+      $('#deletePersonSummary').innerHTML = `Excluir <strong>${escapeHtml(person.name.display)}</strong> (${escapeHtml(person.id)})?<br>A pessoa participa de <strong>${familyCount}</strong> unidade(s) familiar(es) e tem <strong>${person.media.length}</strong> referência(s) de mídia.`;
+      $('#deleteOrphanFamilies').checked = true;
+      $('#deletePersonDialog').showModal();
+    }
+
+    function deletePersonRecord(personId, { removeOrphanFamilies = true } = {}) {
+      const person = state.persons.get(personId);
+      if (!person) throw new Error('Pessoa não encontrada.');
+      const fallbackIds = [
+        ...getSpouses(personId).map(item => item.id),
+        ...getChildren(personId).map(item => item.id),
+        ...getParents(personId).map(item => item.id)
+      ];
+      const familyIds = new Set([...person.spouseFamilyIds, ...person.parentFamilyIds]);
+
+      for (const familyId of familyIds) {
+        const family = state.families.get(familyId);
+        if (!family) continue;
+        family.record.children = family.record.children.filter(child => {
+          if (!['HUSB','WIFE','CHIL'].includes(child.tag)) return true;
+          return nodeText(child) !== personId;
+        });
+      }
+
+      state.ast.records = state.ast.records.filter(record => record !== person.record);
+      state.expandedAncestors.delete(personId);
+      state.expandedDescendants.delete(personId);
+
+      buildModel(state.ast);
+      if (removeOrphanFamilies) {
+        for (const familyId of familyIds) {
+          const family = state.families.get(familyId);
+          if (family && !familyHasUsefulRelation(family.record)) removeFamilyRecord(familyId);
+        }
+        buildModel(state.ast);
+      }
+
+      const fallback = fallbackIds.find(id => state.persons.has(id)) || state.persons.keys().next().value || null;
+      state.rootId = state.rootId === personId || !state.persons.has(state.rootId) ? fallback : state.rootId;
+      state.selectedId = fallback;
+      updateStatus();
+      enableControls(Boolean(state.rootId));
+      $('#emptyState').style.display = state.rootId ? 'none' : 'grid';
+      if (fallback) {
+        renderTree({ fit: true });
+        openDrawer(fallback);
+      } else {
+        closeDrawer();
+        renderTree({ fit: true });
+      }
+      markDirty(`Pessoa excluída: ${person.name.display}. Salve na pasta ou no GitHub para tornar a exclusão permanente.`);
+    }
+
+    function serializeNode(node) {
+      const prefix = node.xref ? `${node.level} ${node.xref} ${node.tag}` : `${node.level} ${node.tag}`;
+      const line = node.value !== '' && node.value != null ? `${prefix} ${node.value}` : prefix;
+      return [line, ...node.children.flatMap(serializeNode)];
+    }
+
+    function updateHeadForExport(fileName, records = state.ast?.records || []) {
+      const head = records.find(record => record.tag === 'HEAD');
+      if (!head) return;
+      setDirectValue(head, 'CHAR', 'UTF-8', { removeWhenEmpty: false });
+      setDirectValue(head, 'DATE', gedToday(), { removeWhenEmpty: false });
+      setDirectValue(head, 'FILE', fileName, { removeWhenEmpty: false });
+    }
+
+    function gedToday() {
+      const now = new Date();
+      return `${String(now.getDate()).padStart(2, '0')} ${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
+    }
+
+    function deepCloneNode(node) {
+      return {
+        ...node,
+        children: (node.children || []).map(deepCloneNode)
+      };
+    }
+
+    function cloneRecordForSelection(record, personIds, familyIds) {
+      const clone = deepCloneNode(record);
+      if (record.tag === 'INDI') {
+        clone.children = clone.children.filter(child => {
+          if (child.tag === 'FAMS' || child.tag === 'FAMC') return familyIds.has(nodeText(child));
+          return true;
+        });
+      }
+      if (record.tag === 'FAM') {
+        clone.children = clone.children.filter(child => {
+          if (['HUSB','WIFE','CHIL'].includes(child.tag)) return personIds.has(nodeText(child));
+          return true;
+        });
+      }
+      return clone;
+    }
+
+    function collectNodePointers(node, output = new Set()) {
+      const matches = String(node.value || '').match(/@[^@\r\n]+@/g) || [];
+      matches.forEach(pointer => output.add(pointer));
+      (node.children || []).forEach(child => collectNodePointers(child, output));
+      return output;
+    }
+
+    function addFamilyMembers(familyId, personIds, familyIds) {
+      const family = state.families.get(familyId);
+      if (!family) return;
+      familyIds.add(family.id);
+      [family.husbandId, family.wifeId, ...family.childrenIds].filter(Boolean).forEach(id => personIds.add(id));
+    }
+
+    function collectAncestorsForExport(rootId, personIds, familyIds, visited = new Set()) {
+      if (!rootId || visited.has(rootId)) return;
+      visited.add(rootId);
+      personIds.add(rootId);
+      const person = state.persons.get(rootId);
+      if (!person) return;
+      for (const familyId of person.parentFamilyIds) {
+        const family = state.families.get(familyId);
+        if (!family) continue;
+        familyIds.add(familyId);
+        [family.husbandId, family.wifeId].filter(Boolean).forEach(parentId => {
+          personIds.add(parentId);
+          collectAncestorsForExport(parentId, personIds, familyIds, visited);
+        });
+        personIds.add(rootId);
+      }
+    }
+
+    function collectDescendantsForExport(rootId, personIds, familyIds, visited = new Set()) {
+      if (!rootId || visited.has(rootId)) return;
+      visited.add(rootId);
+      personIds.add(rootId);
+      const person = state.persons.get(rootId);
+      if (!person) return;
+      for (const familyId of person.spouseFamilyIds) {
+        const family = state.families.get(familyId);
+        if (!family) continue;
+        familyIds.add(familyId);
+        [family.husbandId, family.wifeId].filter(Boolean).forEach(id => personIds.add(id));
+        family.childrenIds.forEach(childId => {
+          personIds.add(childId);
+          collectDescendantsForExport(childId, personIds, familyIds, visited);
+        });
+      }
+    }
+
+    function collectExportSelection(scope, rootId, familyId = '') {
+      if (scope === 'all') {
+        return {
+          personIds: new Set(state.persons.keys()),
+          familyIds: new Set(state.families.keys())
+        };
+      }
+
+      const personIds = new Set();
+      const familyIds = new Set();
+      if (scope === 'family') {
+        if (familyId) addFamilyMembers(familyId, personIds, familyIds);
+        return { personIds, familyIds };
+      }
+
+      if (!rootId || !state.persons.has(rootId)) return { personIds, familyIds };
+      personIds.add(rootId);
+
+      if (scope === 'nuclear') {
+        const person = state.persons.get(rootId);
+        for (const id of person.spouseFamilyIds) addFamilyMembers(id, personIds, familyIds);
+      } else if (scope === 'ancestors') {
+        collectAncestorsForExport(rootId, personIds, familyIds);
+      } else if (scope === 'descendants') {
+        collectDescendantsForExport(rootId, personIds, familyIds);
+      } else if (scope === 'branch') {
+        collectAncestorsForExport(rootId, personIds, familyIds);
+        collectDescendantsForExport(rootId, personIds, familyIds);
+      }
+      return { personIds, familyIds };
+    }
+
+    function buildExportRecords(scope, rootId, familyId, exportName) {
+      if (scope === 'all') {
+        const records = state.ast.records.map(deepCloneNode);
+        updateHeadForExport(exportName, records);
+        records.forEach(record => normalizeLevels(record, 0));
+        if (!records.some(record => record.tag === 'TRLR')) records.push(makeNode(0, 'TRLR'));
+        return records;
+      }
+
+      const { personIds, familyIds } = collectExportSelection(scope, rootId, familyId);
+      const selectedXrefs = new Set([...personIds, ...familyIds]);
+      const resourceIds = new Set();
+      const queue = [];
+
+      const head = state.ast.records.find(record => record.tag === 'HEAD');
+      if (head) queue.push(head);
+      state.ast.records.forEach(record => {
+        if (record.xref && selectedXrefs.has(record.xref)) queue.push(record);
+      });
+
+      while (queue.length) {
+        const record = queue.shift();
+        for (const pointer of collectNodePointers(record)) {
+          const target = state.recordIndex.get(pointer);
+          if (!target || ['INDI','FAM'].includes(target.tag) || resourceIds.has(pointer)) continue;
+          resourceIds.add(pointer);
+          queue.push(target);
+        }
+      }
+
+      const included = state.ast.records.filter(record => {
+        if (record.tag === 'HEAD' || record.tag === 'TRLR') return true;
+        if (record.tag === 'INDI') return personIds.has(record.xref);
+        if (record.tag === 'FAM') return familyIds.has(record.xref);
+        return record.xref ? resourceIds.has(record.xref) : false;
+      }).map(record => cloneRecordForSelection(record, personIds, familyIds));
+
+      updateHeadForExport(exportName, included);
+      included.forEach(record => normalizeLevels(record, 0));
+      if (!included.some(record => record.tag === 'TRLR')) included.push(makeNode(0, 'TRLR'));
+      return included;
+    }
+
+    function serializeGedcomRecords(records) {
+      return `\uFEFF${records.flatMap(serializeNode).join('\r\n')}\r\n`;
+    }
+
+    function serializeGedcom(exportName) {
+      return serializeGedcomRecords(buildExportRecords('all', state.rootId, '', exportName));
+    }
+
+    function makeExportBase() {
+      return (state.fileName || 'arvore').replace(/\.(ged|gedcom)$/i, '').replace(/[^\p{L}\p{N}._-]+/gu, '_');
+    }
+
+    function downloadBlob(content, type, name) {
+      const blob = content instanceof Blob ? content : new Blob([content], { type });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = name;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function sortedPeople() {
+      return [...state.persons.values()].sort((a, b) => a.name.display.localeCompare(b.name.display, 'pt', { sensitivity: 'base' }));
+    }
+
+    function familyExportLabel(family, referenceId = '') {
+      const husband = state.persons.get(family.husbandId)?.name.display || 'cônjuge não identificado';
+      const wife = state.persons.get(family.wifeId)?.name.display || 'cônjuge não identificado';
+      const isChildFamily = referenceId && family.childrenIds.includes(referenceId);
+      const prefix = isChildFamily ? 'Família de origem' : 'União';
+      return `${prefix}: ${husband} + ${wife} · ${family.childrenIds.length} filho(s)`;
+    }
+
+    function populateExportPeople() {
+      const select = $('#exportRootPerson');
+      select.replaceChildren();
+      sortedPeople().forEach(person => select.appendChild(new Option(`${person.name.display} · ${lifeLabel(person)} · ${person.id}`, person.id)));
+      if (state.selectedId && state.persons.has(state.selectedId)) select.value = state.selectedId;
+    }
+
+    function populateExportFamilies(personId) {
+      const select = $('#exportFamily');
+      select.replaceChildren();
+      const person = state.persons.get(personId);
+      if (!person) return;
+      const familyIds = [...new Set([...person.parentFamilyIds, ...person.spouseFamilyIds])];
+      familyIds.forEach(id => {
+        const family = state.families.get(id);
+        if (family) select.appendChild(new Option(familyExportLabel(family, personId), id));
+      });
+    }
+
+    function exportScopeSlug(scope) {
+      return ({ all: 'completo', branch: 'ramo_completo', ancestors: 'antepassados', descendants: 'descendentes', nuclear: 'familias_nucleares', family: 'familia' })[scope] || 'exportado';
+    }
+
+    function updateExportDialog() {
+      const scope = $('#exportScope').value;
+      const rootField = $('#exportRootField');
+      const familyField = $('#exportFamilyField');
+      rootField.style.display = scope === 'all' ? 'none' : '';
+      familyField.style.display = scope === 'family' ? '' : 'none';
+      const rootId = $('#exportRootPerson').value || state.selectedId;
+      if (scope === 'family') populateExportFamilies(rootId);
+      const familyId = $('#exportFamily').value;
+      const selection = collectExportSelection(scope, rootId, familyId);
+      const reference = state.persons.get(rootId)?.name.display || 'árvore';
+      $('#exportSummary').textContent = scope === 'all'
+        ? `Será exportada toda a estrutura: ${state.persons.size} pessoas e ${state.families.size} famílias.`
+        : `Seleção “${reference}”: ${selection.personIds.size} pessoas e ${selection.familyIds.size} famílias. Registos de mídia, fontes e notas referenciados também serão incluídos.`;
+      const date = new Date().toISOString().slice(0, 10);
+      const personSlug = scope === 'all' ? '' : `_${reference.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 45)}`;
+      $('#exportFileName').value = `${makeExportBase()}_${exportScopeSlug(scope)}${personSlug}_${date}.ged`;
+    }
+
+    function openExportGedDialog() {
+      if (!state.ast) return;
+      populateExportPeople();
+      $('#exportScope').value = 'all';
+      updateExportDialog();
+      $('#exportGedDialog').showModal();
+    }
+
+    function exportGedcomFromDialog() {
+      const scope = $('#exportScope').value;
+      const rootId = $('#exportRootPerson').value || state.selectedId;
+      const familyId = $('#exportFamily').value;
+      let name = $('#exportFileName').value.trim() || `${makeExportBase()}_exportado.ged`;
+      if (!/\.ged(com)?$/i.test(name)) name += '.ged';
+      const selection = collectExportSelection(scope, rootId, familyId);
+      if (scope !== 'all' && !selection.personIds.size) {
+        toast('A seleção não contém pessoas. Escolha outra pessoa ou família.', 'warning');
+        return;
+      }
+      const records = buildExportRecords(scope, rootId, familyId, name);
+      downloadBlob(serializeGedcomRecords(records), 'text/plain;charset=utf-8', name);
+      $('#exportGedDialog').close();
+      toast(`GEDCOM gerado: ${selection.personIds.size} pessoas e ${selection.familyIds.size} famílias.`);
+    }
+
+    function exportJson() {
+      if (!state.ast) return;
+      const payload = {
+        schema: 'genealogia-web/1.0',
+        exportedAt: new Date().toISOString(),
+        sourceFile: state.fileName,
+        settings: state.settings,
+        persons: [...state.persons.values()].map(person => ({
+          id: person.id,
+          given: person.name.given,
+          surname: person.name.surname,
+          displayName: person.name.display,
+          sex: person.sex,
+          birth: person.birth,
+          death: person.death,
+          occupation: person.occupation,
+          education: person.education,
+          religion: person.religion,
+          nationality: person.nationality,
+          biography: person.biography,
+          media: person.media.map(media => ({
+            title: media.title,
+            format: media.format,
+            original: media.file,
+            local: `${normalizeMediaBase(state.settings.mediaBase)}${fileNameFromPath(media.file)}`,
+            primary: media.primary
+          })),
+          spouseFamilyIds: [...person.spouseFamilyIds],
+          parentFamilyIds: [...person.parentFamilyIds]
+        })),
+        families: [...state.families.values()].map(family => ({
+          id: family.id,
+          husbandId: family.husbandId,
+          wifeId: family.wifeId,
+          childrenIds: family.childrenIds,
+          marriage: family.marriage,
+          divorce: family.divorce
+        }))
+      };
+      const name = `${makeExportBase()}_consolidado_${new Date().toISOString().slice(0, 10)}.json`;
+      downloadBlob(JSON.stringify(payload, null, 2), 'application/json;charset=utf-8', name);
+      toast('JSON consolidado gerado.');
+    }
+
+    async function decodeGedFile(file) {
+      const buffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      let text = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+      const preview = text.slice(0, 5000).toUpperCase();
+      const replacementCount = (text.match(/\uFFFD/g) || []).length;
+      if (preview.includes('1 CHAR ANSI') || replacementCount > 20) {
+        try { text = new TextDecoder('windows-1252').decode(bytes); }
+        catch { /* mantém UTF-8 */ }
+      }
+      return text;
+    }
+
+    async function loadGedcomText(text, fileName = 'arvore.ged') {
+      setLoading(true, 'A interpretar o GEDCOM…');
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      try {
+        clearLocalMediaRegistry();
+        const ast = parseGedcom(text);
+        buildModel(ast);
+        state.fileName = fileName;
+        state.rootId = state.persons.keys().next().value || null;
+        state.selectedId = state.rootId;
+        state.expandedAncestors.clear();
+        state.expandedDescendants.clear();
+        state.collapsedFamilies.clear();
+        state.dirty = false;
+        if (state.rootId) {
+          expandGenerations(state.rootId, 'ancestors', state.settings.initialGenerations);
+          expandGenerations(state.rootId, 'descendants', state.settings.initialGenerations);
+        }
+        enableControls(Boolean(state.rootId));
+        $('#emptyState').style.display = state.rootId ? 'none' : 'grid';
+        updateStatus();
+        renderTree({ fit: true });
+        if (state.rootId) openDrawer(state.rootId);
+        toast(`${state.persons.size} pessoas e ${state.families.size} famílias carregadas.`);
+        if (ast.repairedLines) toast(`${ast.repairedLines} linhas não padronizadas foram preservadas como continuações.`, 'warning', 6000);
+      } catch (error) {
+        console.error(error);
+        toast(`Falha ao ler o GEDCOM: ${error.message}`, 'error', 7000);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    async function importFile(file) {
+      if (!file) return;
+      if (file.size > 50 * 1024 * 1024) {
+        toast('O ficheiro é muito grande. O limite recomendado para esta versão é 50 MB.', 'warning', 6000);
+      }
+      const text = await decodeGedFile(file);
+      await loadGedcomText(text, file.name);
+    }
+
+    async function loadProjectGedcom() {
+      setLoading(true, 'A carregar o projeto web…');
+      try {
+        let manifest = null;
+        try {
+          const manifestResponse = await fetch('./project.json', { cache: 'no-store' });
+          if (manifestResponse.ok) manifest = await manifestResponse.json();
+        } catch { /* usa o caminho padrão */ }
+        const gedcomPath = manifest?.gedcom || './data/familia.ged';
+        if (manifest?.media) state.settings.mediaBase = normalizeMediaBase(manifest.media);
+        const response = await fetch(gedcomPath, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const buffer = await response.arrayBuffer();
+        const blob = new File([buffer], fileNameFromPath(gedcomPath) || 'familia.ged', { type: 'text/plain' });
+        const text = await decodeGedFile(blob);
+        await loadGedcomText(text, blob.name);
+        state.projectManifest = manifest;
+        updateGitHubUi();
+        toast('Projeto web carregado. As mídias são procuradas na pasta indicada pelo project.json.');
+      } catch (error) {
+        toast('Não encontrei project.json/data/familia.ged neste site. Use “Abrir GEDCOM” ou “Projeto local”.', 'warning', 7000);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    function enableControls(enabled) {
+      ['#searchInput','#orientationSelect','#btnMediaFolder','#btnExportGed','#btnExportJson','#btnZoomIn','#btnZoomOut','#btnFit','#btnCenter'].forEach(selector => $(selector).disabled = !enabled);
+      updateLocalProjectUi();
+      updateGitHubUi();
+    }
+
+    function updateStatus() {
+      if (!state.ast) {
+        $('#fileStatus').textContent = state.projectDirectoryName ? `Projeto local: ${state.projectDirectoryName} · nenhum GEDCOM carregado` : 'Nenhum GEDCOM carregado';
+        return;
+      }
+      const mediaCount = [...state.persons.values()].reduce((sum, person) => sum + person.media.length, 0);
+      const repaired = state.ast.repairedLines ? ` · ${state.ast.repairedLines} linhas reparadas` : '';
+      const project = state.projectDirectoryName ? ` · projeto ${state.projectDirectoryName}` : '';
+      const dirty = state.dirty ? ' · alterações por salvar' : '';
+      $('#fileStatus').textContent = `${state.fileName} · ${state.persons.size} pessoas · ${state.families.size} famílias · ${mediaCount} mídias${project}${repaired}${dirty}`;
+    }
+
+    function searchPeople(query) {
+      const term = normalizeSearch(query);
+      if (!term) return [];
+      const tokens = term.split(/\s+/).filter(Boolean);
+      return [...state.persons.values()]
+        .map(person => {
+          const haystack = normalizeSearch(`${person.name.display} ${person.name.given} ${person.name.surname}`);
+          const all = tokens.every(token => haystack.includes(token));
+          if (!all) return null;
+          let score = 0;
+          if (haystack === term) score += 100;
+          if (haystack.startsWith(term)) score += 50;
+          tokens.forEach(token => { if (haystack.startsWith(token)) score += 10; });
+          return { person, score };
+        })
+        .filter(Boolean)
+        .sort((a, b) => b.score - a.score || a.person.name.display.localeCompare(b.person.name.display, 'pt'))
+        .slice(0, 12)
+        .map(item => item.person);
+    }
+
+    function renderSearchResults() {
+      const container = $('#searchResults');
+      const query = $('#searchInput').value;
+      const results = searchPeople(query);
+      container.replaceChildren();
+      state.activeSearchIndex = -1;
+      if (!query.trim()) { container.classList.remove('open'); return; }
+      if (!results.length) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-list';
+        empty.style.padding = '12px';
+        empty.textContent = 'Nenhuma pessoa encontrada.';
+        container.appendChild(empty);
+      } else {
+        results.forEach((person, index) => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'search-item';
+          button.dataset.index = index;
+          const photo = makePhotoElement(person, 'relation-initial');
+          const text = document.createElement('div');
+          const name = document.createElement('div');
+          name.className = 'search-item-name';
+          name.textContent = person.name.display;
+          const meta = document.createElement('div');
+          meta.className = 'search-item-meta';
+          meta.textContent = `${lifeLabel(person)}${person.birth.place ? ` · ${person.birth.place}` : ''}`;
+          text.append(name, meta);
+          button.append(photo, text);
+          button.addEventListener('click', () => {
+            $('#searchInput').value = '';
+            container.classList.remove('open');
+            focusPerson(person.id);
+          });
+          container.appendChild(button);
+        });
+      }
+      container.classList.add('open');
+    }
+
+    function handleSearchKeydown(event) {
+      const items = $$('.search-item', $('#searchResults'));
+      if (event.key === 'ArrowDown' && items.length) {
+        event.preventDefault();
+        state.activeSearchIndex = Math.min(items.length - 1, state.activeSearchIndex + 1);
+      } else if (event.key === 'ArrowUp' && items.length) {
+        event.preventDefault();
+        state.activeSearchIndex = Math.max(0, state.activeSearchIndex - 1);
+      } else if (event.key === 'Enter' && items.length) {
+        event.preventDefault();
+        items[Math.max(0, state.activeSearchIndex)]?.click();
+        return;
+      } else if (event.key === 'Escape') {
+        $('#searchResults').classList.remove('open');
+        return;
+      } else return;
+      items.forEach((item, index) => item.classList.toggle('active', index === state.activeSearchIndex));
+      items[state.activeSearchIndex]?.scrollIntoView({ block: 'nearest' });
+    }
+
+    function saveSettings() {
+      state.settings.mediaBase = normalizeMediaBase($('#settingMediaBase').value);
+      state.settings.preferLocal = $('#settingPreferLocal').checked;
+      state.settings.initialGenerations = Math.max(1, Math.min(5, Number($('#settingInitialGenerations').value) || 2));
+      state.settings.maxDepth = Math.max(2, Math.min(12, Number($('#settingMaxDepth').value) || 6));
+      localStorage.setItem('genealogy-viewer-settings', JSON.stringify(state.settings));
+      $('#settingsDialog').close();
+      renderTree();
+      if (state.selectedId) renderDrawer(state.selectedId);
+      toast('Configurações aplicadas.');
+    }
+
+    function loadSettings() {
+      try {
+        const stored = JSON.parse(localStorage.getItem('genealogy-viewer-settings') || 'null');
+        if (stored) state.settings = { ...state.settings, ...stored };
+      } catch { /* ignora configuração inválida */ }
+      $('#settingMediaBase').value = state.settings.mediaBase;
+      $('#settingPreferLocal').checked = state.settings.preferLocal;
+      $('#settingInitialGenerations').value = state.settings.initialGenerations;
+      $('#settingMaxDepth').value = state.settings.maxDepth;
+    }
+
+    function bindEvents() {
+      $('#btnImport').addEventListener('click', () => $('#gedFile').click());
+      $('#gedFile').addEventListener('change', event => importFile(event.target.files?.[0]));
+      $('#btnOpenLocalRepo').addEventListener('click', () => connectLocalRepository({ load: true }));
+      $('#btnSaveLocalRepo').addEventListener('click', saveLocalRepositoryProject);
+      $('#btnSaveGitHub').addEventListener('click', openGitHubDialog);
+      $('#btnMediaFolder').addEventListener('click', () => $('#mediaFolderInput').click());
+      $('#mediaFolderInput').addEventListener('change', event => {
+        const count = registerLocalMediaFiles(event.target.files);
+        toast(count ? `${count} ficheiro(s) local(is) associados. A correspondência é feita pelo nome do ficheiro.` : 'Nenhum ficheiro selecionado.', count ? 'info' : 'warning');
+      });
+      $('#btnLoadProject').addEventListener('click', loadProjectGedcom);
+      $('#btnExportGed').addEventListener('click', openExportGedDialog);
+      $('#btnExportJson').addEventListener('click', exportJson);
+      $('#btnZoomIn').addEventListener('click', () => zoomBy(1.25));
+      $('#btnZoomOut').addEventListener('click', () => zoomBy(.8));
+      $('#btnFit').addEventListener('click', fitTree);
+      $('#btnCenter').addEventListener('click', () => centerRoot());
+      $('#drawerClose').addEventListener('click', closeDrawer);
+      $('#btnFocusPerson').addEventListener('click', () => state.selectedId && focusPerson(state.selectedId));
+      $('#btnDeletePerson').addEventListener('click', openDeletePersonDialog);
+      $('#orientationSelect').addEventListener('change', event => {
+        state.orientation = event.target.value;
+        renderTree({ fit: true });
+      });
+      $('#exportScope').addEventListener('change', updateExportDialog);
+      $('#exportRootPerson').addEventListener('change', updateExportDialog);
+      $('#exportFamily').addEventListener('change', updateExportDialog);
+      $('#exportGedForm').addEventListener('submit', event => {
+        event.preventDefault();
+        exportGedcomFromDialog();
+      });
+      ['githubOwner','githubRepo','githubBranch','githubGedcomPath','githubMediaPath'].forEach(id => $(`#${id}`).addEventListener('input', updateGitHubDialogSummary));
+      $('#githubForm').addEventListener('submit', async event => {
+        event.preventDefault();
+        try { await saveProjectToGitHub(); }
+        catch (error) { console.error(error); toast(`Falha ao salvar no GitHub: ${error.message}`, 'error', 9000); }
+      });
+      $('#deletePersonForm').addEventListener('submit', event => {
+        event.preventDefault();
+        const id = $('#deletePersonId').value;
+        $('#deletePersonDialog').close();
+        try { deletePersonRecord(id, { removeOrphanFamilies: $('#deleteOrphanFamilies').checked }); }
+        catch (error) { console.error(error); toast(`Falha ao excluir pessoa: ${error.message}`, 'error', 7000); }
+      });
+
+      $('#searchInput').addEventListener('input', renderSearchResults);
+      $('#searchInput').addEventListener('keydown', handleSearchKeydown);
+
+      $$('.drawer-tab').forEach(tab => tab.addEventListener('click', () => setDrawerTab(tab.dataset.tab)));
+      $$('[data-add-relative]').forEach(button => button.addEventListener('click', () => openRelativeDialog(button.dataset.addRelative)));
+      $$('[data-close-dialog]').forEach(button => button.addEventListener('click', () => document.getElementById(button.dataset.closeDialog)?.close()));
+
+      $('#personForm').addEventListener('submit', event => {
+        event.preventDefault();
+        if (!state.selectedId) return;
+        try {
+          updatePersonRecord(state.selectedId, {
+            given: $('#fieldGiven').value,
+            surname: $('#fieldSurname').value,
+            sex: $('#fieldSex').value,
+            occupation: $('#fieldOccupation').value,
+            birthDate: $('#fieldBirthDate').value,
+            birthPlace: $('#fieldBirthPlace').value,
+            deceased: $('#fieldDeceased').checked,
+            deathDate: $('#fieldDeathDate').value,
+            deathPlace: $('#fieldDeathPlace').value,
+            biography: $('#fieldBiography').value
+          });
+          const id = state.selectedId;
+          refreshModel(id);
+          renderTree();
+          renderDrawer(id);
+          markDirty('Alterações guardadas no modelo local. Use “Salvar na pasta” ou “Salvar no GitHub” para persistir.');
+        } catch (error) {
+          toast(error.message, 'error');
+        }
+      });
+
+      $('#mediaLocalFile').addEventListener('change', event => {
+        const file = event.target.files?.[0] || null;
+        state.pendingLocalMediaFile = file;
+        if (!file) return;
+        const safeName = uniqueMediaFileName(file.name);
+        state.pendingLocalMediaTarget = safeName;
+        $('#mediaPath').value = `${normalizeMediaBase(state.settings.mediaBase)}${safeName}`;
+        if (!$('#mediaTitle').value.trim()) $('#mediaTitle').value = safeName.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ');
+        $('#mediaLocalHint').innerHTML = `Selecionado: <strong>${escapeHtml(file.name)}</strong>. Ao salvar na pasta ou no GitHub, o ficheiro será copiado para <strong>media/${escapeHtml(safeName)}</strong>.`;
+      });
+
+      $('#btnAddMedia').addEventListener('click', () => {
+        const localFile = state.pendingLocalMediaFile;
+        let file = $('#mediaPath').value.trim();
+        if (localFile && !file) file = `${normalizeMediaBase(state.settings.mediaBase)}${localFile.name.replace(/[\/]+/g, '_')}`;
+        if (!state.selectedId || !file) { toast('Escolha um ficheiro local ou informe a URL/caminho da mídia.', 'warning'); return; }
+        if (localFile) registerLocalMediaFile(localFile, `media/${state.pendingLocalMediaTarget || fileNameFromPath(file)}`);
+        addMediaToPerson(state.selectedId, file, $('#mediaTitle').value, $('#mediaPrimary').checked);
+        const id = state.selectedId;
+        refreshModel(id);
+        renderDrawer(id);
+        renderTree();
+        $('#mediaPath').value = '';
+        $('#mediaTitle').value = '';
+        $('#mediaPrimary').checked = false;
+        $('#mediaLocalFile').value = '';
+        state.pendingLocalMediaFile = null;
+        state.pendingLocalMediaTarget = '';
+        $('#mediaLocalHint').innerHTML = 'Ao escolher um ficheiro local, a página mostra-o imediatamente. Use <strong>Salvar na pasta</strong> ou <strong>Salvar no GitHub</strong> para copiar o ficheiro para <strong>./media/</strong> e guardar o GEDCOM.';
+        markDirty(localFile ? 'Mídia local associada. Use “Salvar na pasta” ou “Salvar no GitHub” para copiar o ficheiro e guardar o GEDCOM.' : 'Referência de mídia adicionada.');
+      });
+
+      $('#relativeForm').addEventListener('submit', event => {
+        event.preventDefault();
+        if (!state.selectedId) return;
+        try {
+          const type = $('#relativeType').value;
+          const created = createPersonRecord({
+            given: $('#relativeGiven').value.trim(),
+            surname: $('#relativeSurname').value.trim(),
+            sex: $('#relativeSex').value,
+            birthDate: $('#relativeBirthDate').value.trim(),
+            birthPlace: $('#relativeBirthPlace').value.trim()
+          });
+          attachNewRelative(state.selectedId, created.id, type, $('#relativeFamily').value);
+          const oldSelected = state.selectedId;
+          refreshModel(oldSelected);
+          state.expandedAncestors.add(oldSelected);
+          state.expandedDescendants.add(oldSelected);
+          $('#relativeDialog').close();
+          renderTree();
+          renderDrawer(oldSelected);
+          markDirty('Novo familiar criado e relacionado. Use “Salvar na pasta” ou “Salvar no GitHub” para persistir.');
+        } catch (error) {
+          console.error(error);
+          toast(error.message, 'error');
+        }
+      });
+
+      $('#btnSettings').addEventListener('click', () => {
+        loadSettings();
+        $('#settingsDialog').showModal();
+      });
+      $('#settingsForm').addEventListener('submit', event => { event.preventDefault(); saveSettings(); });
+
+      const dropZone = $('#dropZone');
+      const treeStage = $('#treeStage');
+      ['dragenter','dragover'].forEach(type => treeStage.addEventListener(type, event => {
+        event.preventDefault();
+        dropZone.classList.add('dragover');
+      }));
+      ['dragleave','drop'].forEach(type => treeStage.addEventListener(type, event => {
+        event.preventDefault();
+        dropZone.classList.remove('dragover');
+      }));
+      treeStage.addEventListener('drop', event => importFile(event.dataTransfer?.files?.[0]));
+      dropZone.addEventListener('click', () => $('#gedFile').click());
+
+      document.addEventListener('click', event => {
+        if (!event.target.closest('.search-wrap')) $('#searchResults').classList.remove('open');
+      });
+      document.addEventListener('keydown', event => {
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+          event.preventDefault();
+          $('#searchInput').focus();
+        }
+        if (event.key === 'Escape' && !document.querySelector('dialog[open]')) closeDrawer();
+      });
+      window.addEventListener('resize', () => state.rootId && centerRoot());
+    }
+
+    function init() {
+      loadSettings();
+      bindEvents();
+      updateLocalProjectUi();
+      window.addEventListener('beforeunload', event => {
+        if (!state.dirty) return;
+        event.preventDefault();
+        event.returnValue = '';
+      });
+      if (window.d3) initZoom();
+      else toast('D3 não foi carregado. A importação funciona, mas a árvore não será desenhada.', 'error', 8000);
+      const params = new URLSearchParams(location.search);
+      if (params.get('autoload') === '1') {
+        loadProjectGedcom();
+      } else if (params.get('autoload') !== '0' && location.protocol !== 'file:') {
+        fetch('./project.json', { cache: 'no-store' })
+          .then(response => { if (response.ok) loadProjectGedcom(); })
+          .catch(() => {});
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
