@@ -10,8 +10,8 @@
 2 _RTLSAVE RTL
 2 CORP MyHeritage.com
 1 DEST MYHERITAGE
-1 DATE 04 JUN 2026
-1 FILE Exported by MyHeritage.com from árvore de família Pessoa in De Sousa Pessoa on Thu, 04 Jun 2026
+1 DATE 17 JUN 2026
+1 FILE familia.ged
 1 _PROJECT_GUID K82A65PG-1D81-A047-V6AA-V6AA785FN120
 1 _EXPORTED_FROM_SITE_ID 1696718236
 0 @A999987@ ALBUM
@@ -1236,8 +1236,8 @@
 2 QUAY 4
 2 DATA
 3 TEXT Aurora Martins Dos Santos&amp;lt;br&amp;gt;Nome de casada: Aurora Martins do Santos Luiz&amp;lt;br&amp;gt;Género: Feminino&amp;lt;br&amp;gt;Nascimento: 28 de jun de 1918 - Niterói, Rio de Janeiro, B
-4 CONC rasil&amp;lt;br&amp;gt;Crisma: 20 de out de 1918&amp;lt;br&amp;gt;Morte: Ilha do Governador, Rio de Janeiro, Rio de Janeiro, Brasil&amp;lt;br&amp;gt;Mãe: Zilda Martins de Carvalho&amp;lt;br&amp;gt;C�
-4 CONC �njuges: João Luiz, Osmar Chaves de Macedo&amp;lt;br&amp;gt;Filha: Maurizia dos Santos Luiz&amp;lt;br&amp;gt;Irmãos: Feto, Antonio dos Santos Teixeira, Manoel dos Santos Teixeira, Pantaleão dos San
+4 CONC rasil&amp;lt;br&amp;gt;Crisma: 20 de out de 1918&amp;lt;br&amp;gt;Morte: Ilha do Governador, Rio de Janeiro, Rio de Janeiro, Brasil&amp;lt;br&amp;gt;Mãe: Zilda Martins de Carvalho&amp;lt;br&amp;gt;C�
+4 CONC �njuges: João Luiz, Osmar Chaves de Macedo&amp;lt;br&amp;gt;Filha: Maurizia dos Santos Luiz&amp;lt;br&amp;gt;Irmãos: Feto, Antonio dos Santos Teixeira, Manoel dos Santos Teixeira, Pantaleão dos San
 4 CONC tos Queiroz Filho, Manoel Dos Santos Queiroz, Nelson dos Santos Teixeira&amp;lt;br&amp;gt;Esta pessoa parece ter parentes duplicados. Visualizar este assunto no FamilySearch para ver a informação co
 4 CONC mpleta.
 2 EVEN Record
@@ -1462,8 +1462,8 @@
 2 QUAY 4
 2 DATA
 3 TEXT Luiza Pedra Gonçalves
-Nascimento: Portugal
-Pais: Pedro Gonçalves Canelho, Maria Gonçalves Canelho (nascida Martimis)
+4 CONT Nascimento: Portugal
+4 CONT Pais: Pedro Gonçalves Canelho, Maria Gonçalves Canelho (nascida Martimis)
 2 EVEN Record
 3 ROLE 40001:2133835632:
 1 RIN MH:I500028
@@ -1504,8 +1504,8 @@ Pais: Pedro Gonçalves Canelho, Maria Gonçalves Canelho (nascida Martimis)
 2 QUAY 4
 2 DATA
 3 TEXT Pedro Gonçalves Canelho
-Esposa: Maria Gonçalves Canelho (nascida Martimis)
-Filha: Luiza Pedra Gonçalves
+4 CONT Esposa: Maria Gonçalves Canelho (nascida Martimis)
+4 CONT Filha: Luiza Pedra Gonçalves
 2 EVEN Record
 3 ROLE 40001:2133840339:
 1 RIN MH:I500031
@@ -2581,8 +2581,8 @@ Filha: Luiza Pedra Gonçalves
 2 QUAY 4
 2 DATA
 3 TEXT Antonio dos Santos Teixeira&amp;lt;br&amp;gt;Género: Masculino&amp;lt;br&amp;gt;Nascimento: 1 de mai de 1922 - Niterói, Rio de Janeiro, Brasil&amp;lt;br&amp;gt;Residência: Rio de Janeiro, Rio de Ja
-4 CONC neiro, Brasil&amp;lt;br&amp;gt;Profissão: comerciário&amp;lt;br&amp;gt;Mãe: Zilda Martins de Carvalho&amp;lt;br&amp;gt;Irmãos: Feto, Aurora Martins Dos Santos, Manoel dos Santos Teixeira, Pantale�
-4 CONC �o dos Santos Queiroz Filho, Manoel Dos Santos Queiroz, Nelson dos Santos Teixeira&amp;lt;br&amp;gt;Esta pessoa parece ter parentes duplicados. Visualizar este assunto no FamilySearch para ver a infor
+4 CONC neiro, Brasil&amp;lt;br&amp;gt;Profissão: comerciário&amp;lt;br&amp;gt;Mãe: Zilda Martins de Carvalho&amp;lt;br&amp;gt;Irmãos: Feto, Aurora Martins Dos Santos, Manoel dos Santos Teixeira, Pantale�
+4 CONC �o dos Santos Queiroz Filho, Manoel Dos Santos Queiroz, Nelson dos Santos Teixeira&amp;lt;br&amp;gt;Esta pessoa parece ter parentes duplicados. Visualizar este assunto no FamilySearch para ver a infor
 4 CONC mação completa.
 2 EVEN Record
 3 ROLE 40001:1751403382:
@@ -3057,8 +3057,8 @@ Filha: Luiza Pedra Gonçalves
 2 QUAY 4
 2 DATA
 3 TEXT Antonio dos Santos Teixeira&amp;lt;br&amp;gt;Género: Masculino&amp;lt;br&amp;gt;Nascimento: 1 de mai de 1922 - Niterói, Rio de Janeiro, Brasil&amp;lt;br&amp;gt;Residência: Rio de Janeiro, Rio de Ja
-4 CONC neiro, Brasil&amp;lt;br&amp;gt;Profissão: comerciário&amp;lt;br&amp;gt;Mãe: Zilda Martins de Carvalho&amp;lt;br&amp;gt;Irmãos: Feto, Aurora Martins Dos Santos, Manoel dos Santos Teixeira, Pantale�
-4 CONC �o dos Santos Queiroz Filho, Manoel Dos Santos Queiroz, Nelson dos Santos Teixeira&amp;lt;br&amp;gt;Esta pessoa parece ter parentes duplicados. Visualizar este assunto no FamilySearch para ver a infor
+4 CONC neiro, Brasil&amp;lt;br&amp;gt;Profissão: comerciário&amp;lt;br&amp;gt;Mãe: Zilda Martins de Carvalho&amp;lt;br&amp;gt;Irmãos: Feto, Aurora Martins Dos Santos, Manoel dos Santos Teixeira, Pantale�
+4 CONC �o dos Santos Queiroz Filho, Manoel Dos Santos Queiroz, Nelson dos Santos Teixeira&amp;lt;br&amp;gt;Esta pessoa parece ter parentes duplicados. Visualizar este assunto no FamilySearch para ver a infor
 4 CONC mação completa.
 2 EVEN Record
 3 ROLE 40001:1751403382:
@@ -3989,9 +3989,6 @@ Filha: Luiza Pedra Gonçalves
 2 GIVN Júlio Cesar
 2 SURN Pereira Freire
 1 SEX M
-1 BIRT
-2 DATE 14 MAY 1972
-2 PLAC Itaperuna, Rio de Janeiro, Brasil
 1 NATI Brasileira
 2 DATE 14 MAY 1972
 2 PLAC Laje do Muriaé
@@ -4003,14 +4000,11 @@ Filha: Luiza Pedra Gonçalves
 3 CITY MANAUS
 3 CTRY Brasil
 3 POST 69057-063
-1 OCCU Médico
-2 PLAC MANAUS
 1 EDUC Faculdade de Medicina de Campos
 2 PLAC Faculdade de Medicina de Campos
 1 EVEN Portuguese, English
 2 TYPE Language spoken
 1 FAMS @F500004@
-1 FAMS @F500050@
 1 FAMC @F500049@
 1 SOUR @S500010@
 2 PAGE https://www.myheritage.com.br/profile-OYYV6SJVTRSDW4DUOBEQY5TOXSYUYRY-1000012/leandro-pontes-pessoa
@@ -4151,49 +4145,6 @@ Filha: Luiza Pedra Gonçalves
 2 _PARENTPHOTO Y
 2 _POSITION 156 81 452 475
 2 _PHOTO_RIN MH:P500037
-0 @I500124@ INDI
-1 _UPD 15 MAY 2026 16:09:50 GMT -0500 
-1 NAME Érika /Lima Gomes/
-2 GIVN Érika
-2 SURN Lima Gomes
-2 _MARNM Pontes Pessoa
-1 SEX F
-1 BIRT
-2 DATE 26 APR 1976
-1 DEAT Y
-1 RESI
-2 EMAIL erikalimagomes@@yahoo.com.br
-1 FAMS @F500050@
-1 SOUR @S500012@
-2 PAGE Érika Lima Gomes
-2 QUAY 3
-2 DATA
-3 DATE 15 MAY 2026
-3 TEXT Adicionado através de confirmação de uma Smart Match
-2 EVEN Discovery
-1 SOUR @S500012@
-2 PAGE https://www.myheritage.com.br/profile-OYYV6SJVTRSDW4DUOBEQY5TOXSYUYRY-2000019/erika-lima-gomes
-2 QUAY 3
-2 DATA
-3 TEXT Adicionado através de confirmação de uma Smart Match
-2 EVEN Smart Matching
-3 ROLE 2000019
-1 SOUR @S500003@
-2 PAGE https://www.myheritage.com.br/profile-OYYV7HPM5QQY36Y4NA473VOHUZWAORA-2000038/erika-lima-gomes
-2 QUAY 3
-2 DATA
-3 TEXT Adicionado através de confirmação de uma Smart Match
-2 EVEN Smart Matching
-3 ROLE 2000038
-1 SOUR @S500003@
-2 PAGE https://www.myheritage.com.br/profile-OYYV7HPM5QQY36Y4NA473VOHUZWAORA-2000038/erika-lima-gomes
-2 QUAY 3
-2 DATA
-3 TEXT Adicionado através de confirmação de uma Smart Match
-2 EVEN Smart Matching
-3 ROLE 2000038
-1 RIN MH:I500124
-1 _UID 6A078AF4E06AC1946AB306E8412DAD15
 0 @I500125@ INDI
 1 _UPD 15 MAY 2026 16:22:28 GMT -0500 
 1 NAME Jose /de Souza Pessoa/
@@ -6232,8 +6183,8 @@ Filha: Luiza Pedra Gonçalves
 2 QUAY 4
 2 DATA
 3 TEXT Ana Rita Francisco de Sousa (nascida de Sousa)&amp;lt;br&amp;gt;Gênero: Feminino&amp;lt;br&amp;gt;Nascimento: 18 de out de 1911 - Seabra, Bahia, Brasil&amp;lt;br&amp;gt;Casamento: 25 de jun de 1966 -
-4 CONC  Baraunas, Seabra, Bahia, Brasil&amp;lt;br&amp;gt;Pais: Joao Ferreira de Souza, Deolina Ferreira de Souza (nascida Rita de Souza)&amp;lt;br&amp;gt;Esposo: Jose Francisco de Sousa&amp;lt;br&amp;gt;Irm�
-4 CONC �: Emilia Rita D Souza
+4 CONC  Baraunas, Seabra, Bahia, Brasil&amp;lt;br&amp;gt;Pais: Joao Ferreira de Souza, Deolina Ferreira de Souza (nascida Rita de Souza)&amp;lt;br&amp;gt;Esposo: Jose Francisco de Sousa&amp;lt;br&amp;gt;Irm�
+4 CONC �: Emilia Rita D Souza
 2 EVEN Record
 3 ROLE 40001:2627255704:
 1 RIN MH:I500236
@@ -9410,14 +9361,6 @@ Filha: Luiza Pedra Gonçalves
 1 MARR
 2 DATE 5 DEC 1954
 2 PLAC Laje do Muriaé
-0 @F500050@ FAM
-1 _UPD 15 MAY 2026 16:07:00 GMT -0500
-1 HUSB @I500121@
-1 WIFE @I500124@
-1 RIN MH:F500050
-1 _UID 6A078AF4E22941956AB306E8412DAD15
-1 MARR
-1 DIV Y
 0 @F500051@ FAM
 1 _UPD 15 MAY 2026 16:08:22 GMT -0500
 1 HUSB @I500125@
