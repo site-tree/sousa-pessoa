@@ -1,0 +1,7 @@
+{
+  "schema": "genealogia-web-project/1.0",
+  "title": "Construção de Genealogia",
+  "gedcom": "./data/familia.ged",
+  "media": "./media/",
+  "autoload": true
+}

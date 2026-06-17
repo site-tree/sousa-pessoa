@@ -1,0 +1,13 @@
+# Ficheiros temporários do sistema
+.DS_Store
+Thumbs.db
+*.tmp
+*.bak
+
+# ATENÇÃO:
+# data/familia.ged e media/ NÃO estão ignorados porque o modo "Salvar projeto"
+# foi criado para versioná-los no repositório local.
+# Se o seu GitHub Pages for público e não quiser expor dados familiares,
+# descomente as duas linhas abaixo:
+# data/*.ged
+# media/*
