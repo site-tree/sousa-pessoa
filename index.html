@@ -95,6 +95,10 @@
     .control-btn:hover, .icon-btn:hover { background: #f9fafb; border-color: #98a2b3; }
     .control-btn.primary { background: var(--primary); border-color: var(--primary); color: white; }
     .control-btn.primary:hover { background: var(--primary-strong); }
+    .control-btn.danger { background: #fff; border-color: #f0a39d; color: var(--danger); }
+    .control-btn.danger:hover { background: #fff1f0; border-color: var(--danger); }
+    .control-btn.danger-solid { background: var(--danger); border-color: var(--danger); color: #fff; }
+    .control-btn.danger-solid:hover { background: #912018; border-color: #912018; }
     .toolbar select { height: 38px; border: 1px solid #d0d5dd; border-radius: 10px; background: white; padding: 0 28px 0 10px; font-size: 12px; color: #344054; }
 
     .workspace { position: relative; min-height: 0; overflow: hidden; }
@@ -296,7 +300,8 @@
         <input id="mediaFolderInput" type="file" webkitdirectory directory multiple hidden />
         <button id="btnImport" class="control-btn primary" type="button" title="Abrir um ficheiro GEDCOM do computador">📂 <span>Abrir GEDCOM</span></button>
         <button id="btnOpenLocalRepo" class="control-btn" type="button" title="Abrir ou ligar a pasta local clonada do repositório Git">🗂 <span id="localRepoLabel">Projeto local</span></button>
-        <button id="btnSaveLocalRepo" class="control-btn" type="button" title="Guardar o GEDCOM e copiar as mídias para a pasta local do projeto" disabled>💾 <span>Salvar projeto</span></button>
+        <button id="btnSaveLocalRepo" class="control-btn" type="button" title="Guardar o GEDCOM e copiar as mídias para a pasta local do projeto" disabled>💾 <span>Salvar na pasta</span></button>
+        <button id="btnSaveGitHub" class="control-btn" type="button" title="Fazer commit direto no repositório GitHub usando um token fornecido nesta sessão" disabled>☁ <span id="githubSaveLabel">Salvar no GitHub</span></button>
         <button id="btnMediaFolder" class="control-btn" type="button" title="Associar uma pasta local de fotografias e documentos" disabled>🖼 <span id="mediaFolderLabel">Pasta de mídia</span></button>
         <button id="btnLoadProject" class="control-btn" type="button" title="Carregar o GEDCOM publicado neste repositório">↻ <span>Projeto web</span></button>
         <select id="orientationSelect" aria-label="Orientação da árvore" disabled>
@@ -391,6 +396,7 @@
               <div class="field"><textarea id="fieldBiography" name="biography" placeholder="Notas biográficas, hipóteses de investigação e referências documentais…"></textarea></div>
 
               <div class="drawer-actions">
+                <button id="btnDeletePerson" class="control-btn danger" type="button" style="margin-right:auto">🗑 Excluir pessoa</button>
                 <button id="btnFocusPerson" class="control-btn" type="button">◎ Focar</button>
                 <button class="control-btn primary" type="submit">Guardar alterações</button>
               </div>
@@ -440,7 +446,7 @@
           <div class="field full"><label for="relativeBirthPlace">Local de nascimento</label><input id="relativeBirthPlace" /></div>
           <div id="relativeFamilyField" class="field full" style="display:none"><label for="relativeFamily">Unidade familiar para o novo filho</label><select id="relativeFamily"></select></div>
         </div>
-        <div class="hint" style="margin-top:14px">A relação é criada no modelo local e só passa a integrar o repositório após exportar o novo GEDCOM e fazer commit/push.</div>
+        <div class="hint" style="margin-top:14px">A relação é criada primeiro no modelo local. Depois, use “Salvar no GitHub” ou “Salvar na pasta” para persistir a alteração.</div>
       </div>
       <div class="dialog-footer"><button class="control-btn" type="button" data-close-dialog="relativeDialog">Cancelar</button><button class="control-btn primary" type="submit">Criar e relacionar</button></div>
     </form>
@@ -466,9 +472,43 @@
           <div class="field full"><label for="exportFileName">Nome do ficheiro</label><input id="exportFileName" /></div>
         </div>
         <div id="exportSummary" class="export-summary"></div>
-        <div class="hint" style="margin-top:14px">Este botão gera um ficheiro para download. Para persistir a árvore e as imagens numa pasta clonada do Git, use <strong>Projeto local → Salvar projeto</strong>. A exportação de ramo cria apenas uma cópia filtrada.</div>
+        <div class="hint" style="margin-top:14px">Este botão gera um ficheiro para download. Para persistir a árvore e as imagens numa pasta clonada do Git, use <strong>Projeto local → Salvar na pasta</strong>. A exportação de ramo cria apenas uma cópia filtrada.</div>
       </div>
       <div class="dialog-footer"><button class="control-btn" type="button" data-close-dialog="exportGedDialog">Cancelar</button><button class="control-btn primary" type="submit">⇩ Gerar GEDCOM</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="githubDialog">
+    <form id="githubForm">
+      <div class="dialog-header"><div class="dialog-title">Salvar diretamente no GitHub</div><button class="icon-btn" type="button" data-close-dialog="githubDialog">×</button></div>
+      <div class="dialog-body">
+        <div class="form-grid">
+          <div class="field"><label for="githubOwner">Utilizador / organização</label><input id="githubOwner" autocomplete="off" required /></div>
+          <div class="field"><label for="githubRepo">Repositório</label><input id="githubRepo" autocomplete="off" required /></div>
+          <div class="field"><label for="githubBranch">Branch</label><input id="githubBranch" value="main" autocomplete="off" required /></div>
+          <div class="field"><label for="githubGedcomPath">Caminho do GEDCOM</label><input id="githubGedcomPath" value="data/familia.ged" autocomplete="off" required /></div>
+          <div class="field full"><label for="githubMediaPath">Pasta de mídia</label><input id="githubMediaPath" value="media" autocomplete="off" required /></div>
+          <div class="field full"><label for="githubCommitMessage">Mensagem do commit</label><input id="githubCommitMessage" value="Atualiza árvore genealógica" required /></div>
+          <div class="field full"><label for="githubToken">Fine-grained personal access token</label><input id="githubToken" type="password" autocomplete="off" placeholder="github_pat_…" required /></div>
+          <div class="field full"><label class="check-row"><input id="githubUploadMedia" type="checkbox" checked /> Enviar também fotografias e documentos locais ainda não publicados</label></div>
+        </div>
+        <div id="githubRepoSummary" class="export-summary"></div>
+        <div class="hint" style="margin-top:14px"><strong>Segurança:</strong> o token fica apenas na memória desta página e não é gravado no GEDCOM, no project.json nem no navegador. Use um token limitado a este repositório, com permissão de leitura e escrita em <strong>Contents</strong>.</div>
+      </div>
+      <div class="dialog-footer"><button class="control-btn" type="button" data-close-dialog="githubDialog">Cancelar</button><button class="control-btn primary" type="submit">☁ Fazer commit no GitHub</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="deletePersonDialog">
+    <form id="deletePersonForm">
+      <div class="dialog-header"><div class="dialog-title">Excluir pessoa</div><button class="icon-btn" type="button" data-close-dialog="deletePersonDialog">×</button></div>
+      <div class="dialog-body">
+        <input id="deletePersonId" type="hidden" />
+        <div id="deletePersonSummary" class="export-summary"></div>
+        <label class="check-row" style="margin-top:14px"><input id="deleteOrphanFamilies" type="checkbox" checked /> Remover unidades familiares que ficarem sem relação útil</label>
+        <div class="hint" style="margin-top:14px">A pessoa será retirada das relações de pais, cônjuges e filhos. Os ficheiros físicos de mídia não serão apagados automaticamente, para evitar perda acidental. A alteração só se torna permanente depois de salvar na pasta ou no GitHub.</div>
+      </div>
+      <div class="dialog-footer"><button class="control-btn" type="button" data-close-dialog="deletePersonDialog">Cancelar</button><button class="control-btn danger-solid" type="submit">Excluir definitivamente</button></div>
     </form>
   </dialog>
 
@@ -516,6 +556,7 @@
       projectDirectoryName: '',
       projectManifest: null,
       dirty: false,
+      githubSaving: false,
       settings: {
         mediaBase: './media/',
         preferLocal: true,
@@ -958,7 +999,34 @@
       state.dirty = true;
       updateStatus();
       updateLocalProjectUi();
+      updateGitHubUi();
       if (message) toast(message);
+    }
+
+    function inferGitHubRepository() {
+      const manifestGithub = state.projectManifest?.github || {};
+      let owner = manifestGithub.owner || '';
+      let repo = manifestGithub.repo || '';
+      if (!owner && location.hostname.toLowerCase().endsWith('.github.io')) owner = location.hostname.split('.')[0];
+      if (!repo && owner && location.hostname.toLowerCase().endsWith('.github.io')) {
+        const firstPath = location.pathname.split('/').filter(Boolean)[0];
+        repo = firstPath || `${owner}.github.io`;
+      }
+      return {
+        owner,
+        repo,
+        branch: manifestGithub.branch || 'main',
+        gedcomPath: String(state.projectManifest?.gedcom || './data/familia.ged').replace(/^\.\//, ''),
+        mediaPath: String(state.projectManifest?.media || './media/').replace(/^\.\//, '').replace(/\/$/, '') || 'media'
+      };
+    }
+
+    function updateGitHubUi() {
+      const button = $('#btnSaveGitHub');
+      if (button) button.disabled = !state.ast || state.githubSaving;
+      const label = $('#githubSaveLabel');
+      const config = inferGitHubRepository();
+      if (label) label.textContent = config.owner && config.repo ? `GitHub: ${config.repo}` : 'Salvar no GitHub';
     }
 
     function updateLocalProjectUi() {
@@ -1023,7 +1091,7 @@
         } catch (error) {
           if (error?.name === 'NotFoundError') {
             updateLocalProjectUi();
-            toast(`Pasta ligada, mas não encontrei ${gedcomPath}. Abra um GEDCOM e clique em “Salvar projeto”.`, 'warning', 7000);
+            toast(`Pasta ligada, mas não encontrei ${gedcomPath}. Abra um GEDCOM e clique em “Salvar na pasta”.`, 'warning', 7000);
             return;
           }
           throw error;
@@ -1034,9 +1102,11 @@
         state.projectDirectoryName = handle.name;
         state.projectManifest = manifest;
         state.settings.mediaBase = './media/';
+        updateGitHubUi();
         const count = await loadMediaDirectoryFromProject(handle, mediaPath);
         state.dirty = false;
         updateLocalProjectUi();
+        updateGitHubUi();
         updateStatus();
         renderTree();
         if (state.selectedId) renderDrawer(state.selectedId);
@@ -1100,7 +1170,8 @@
           media: './media/',
           updatedAt: new Date().toISOString(),
           sourceFile: state.fileName || gedcomName,
-          autoload: true
+          autoload: true,
+          ...(state.projectManifest?.github ? { github: state.projectManifest.github } : {})
         };
         await writeProjectFile(state.projectDirectoryHandle, 'project.json', JSON.stringify(manifest, null, 2) + '\n');
         state.projectManifest = manifest;
@@ -1115,6 +1186,165 @@
         console.error(error);
         toast(`Falha ao salvar o projeto local: ${error.message}`, 'error', 8000);
       } finally {
+        setLoading(false);
+      }
+    }
+
+    function encodeGitHubPath(path = '') {
+      return splitProjectPath(path).map(part => encodeURIComponent(part)).join('/');
+    }
+
+    function bytesToBase64(bytes) {
+      let binary = '';
+      const chunkSize = 0x8000;
+      for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+        binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length)));
+      }
+      return btoa(binary);
+    }
+
+    function textToBase64(text) {
+      return bytesToBase64(new TextEncoder().encode(text));
+    }
+
+    async function githubApiRequest(url, token, options = {}, allowNotFound = false) {
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          Accept: 'application/vnd.github+json',
+          Authorization: `Bearer ${token}`,
+          'X-GitHub-Api-Version': '2026-03-10',
+          ...(options.headers || {})
+        }
+      });
+      if (allowNotFound && response.status === 404) return null;
+      if (!response.ok) {
+        let detail = '';
+        try { detail = (await response.json())?.message || ''; } catch { detail = await response.text(); }
+        if (response.status === 401) throw new Error('Token inválido ou expirado.');
+        if (response.status === 403) throw new Error(`Acesso recusado pelo GitHub. Confirme a permissão Contents: read and write. ${detail}`.trim());
+        if (response.status === 404) throw new Error('Repositório, branch ou ficheiro não encontrado. Confirme os campos e o acesso do token.');
+        throw new Error(`GitHub respondeu HTTP ${response.status}${detail ? `: ${detail}` : ''}`);
+      }
+      if (response.status === 204) return null;
+      return response.json();
+    }
+
+    async function getGitHubFile(owner, repo, path, branch, token) {
+      const encoded = encodeGitHubPath(path);
+      const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${encoded}?ref=${encodeURIComponent(branch)}`;
+      return githubApiRequest(url, token, {}, true);
+    }
+
+    async function putGitHubFile({ owner, repo, path, branch, token, message, contentBase64 }) {
+      const current = await getGitHubFile(owner, repo, path, branch, token);
+      const encoded = encodeGitHubPath(path);
+      const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${encoded}`;
+      const body = { message, content: contentBase64, branch };
+      if (current?.sha) body.sha = current.sha;
+      return githubApiRequest(url, token, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+    }
+
+    function prepareReferencedMediaForRemote(mediaPath = 'media') {
+      const uploads = new Map();
+      const normalizedPath = splitProjectPath(mediaPath).join('/') || 'media';
+      for (const person of state.persons.values()) {
+        for (const media of person.media) {
+          const entry = findLocalMediaEntry(media.file);
+          if (!entry?.file) continue;
+          const targetName = sanitizeMediaFileName(fileNameFromPath(media.file) || entry.file.name);
+          const key = normalizeMediaLookupKey(targetName);
+          if (!uploads.has(key)) uploads.set(key, { name: targetName, file: entry.file });
+          setMediaFileReference(media, `./${normalizedPath}/${targetName}`);
+        }
+      }
+      return [...uploads.values()];
+    }
+
+    function openGitHubDialog() {
+      if (!state.ast) return;
+      const config = inferGitHubRepository();
+      $('#githubOwner').value = config.owner;
+      $('#githubRepo').value = config.repo;
+      $('#githubBranch').value = config.branch;
+      $('#githubGedcomPath').value = config.gedcomPath;
+      $('#githubMediaPath').value = config.mediaPath;
+      $('#githubCommitMessage').value = `Atualiza árvore genealógica (${new Date().toISOString().slice(0, 10)})`;
+      $('#githubToken').value = '';
+      $('#githubUploadMedia').checked = true;
+      updateGitHubDialogSummary();
+      $('#githubDialog').showModal();
+      setTimeout(() => (config.owner && config.repo ? $('#githubToken') : $('#githubOwner')).focus(), 40);
+    }
+
+    function updateGitHubDialogSummary() {
+      const owner = $('#githubOwner')?.value.trim() || 'utilizador';
+      const repo = $('#githubRepo')?.value.trim() || 'repositório';
+      const branch = $('#githubBranch')?.value.trim() || 'main';
+      const gedcomPath = $('#githubGedcomPath')?.value.trim() || 'data/familia.ged';
+      const localMedia = new Set();
+      for (const person of state.persons.values()) for (const media of person.media) if (findLocalMediaEntry(media.file)?.file) localMedia.add(normalizeMediaLookupKey(fileNameFromPath(media.file)));
+      $('#githubRepoSummary').innerHTML = `<strong>${escapeHtml(owner)}/${escapeHtml(repo)}</strong> · branch <strong>${escapeHtml(branch)}</strong><br>GEDCOM: <strong>${escapeHtml(gedcomPath)}</strong> · ${localMedia.size} mídia(s) local(is) disponível(is) para envio.`;
+    }
+
+    async function saveProjectToGitHub() {
+      if (!state.ast || state.githubSaving) return;
+      const owner = $('#githubOwner').value.trim();
+      const repo = $('#githubRepo').value.trim();
+      const branch = $('#githubBranch').value.trim() || 'main';
+      const gedcomPath = splitProjectPath($('#githubGedcomPath').value.trim()).join('/');
+      const mediaPath = splitProjectPath($('#githubMediaPath').value.trim()).join('/') || 'media';
+      const message = $('#githubCommitMessage').value.trim() || 'Atualiza árvore genealógica';
+      const token = $('#githubToken').value.trim();
+      const uploadMedia = $('#githubUploadMedia').checked;
+      if (!owner || !repo || !gedcomPath || !token) throw new Error('Preencha utilizador, repositório, caminho do GEDCOM e token.');
+
+      state.githubSaving = true;
+      updateGitHubUi();
+      setLoading(true, 'A enviar alterações para o GitHub…');
+      try {
+        const mediaUploads = uploadMedia ? prepareReferencedMediaForRemote(mediaPath) : [];
+        refreshModel(state.selectedId);
+        const gedcomName = fileNameFromPath(gedcomPath) || 'familia.ged';
+        const gedcomText = serializeGedcom(gedcomName);
+        let uploaded = 0;
+        for (const item of mediaUploads) {
+          setLoading(true, `A enviar mídia ${uploaded + 1} de ${mediaUploads.length}…`);
+          const bytes = new Uint8Array(await item.file.arrayBuffer());
+          await putGitHubFile({ owner, repo, path: `${mediaPath}/${item.name}`, branch, token, message: `${message} · mídia ${item.name}`, contentBase64: bytesToBase64(bytes) });
+          uploaded += 1;
+        }
+
+        const manifest = {
+          schema: 'genealogia-web-project/1.1',
+          title: state.projectManifest?.title || 'Construção de Genealogia',
+          gedcom: `./${gedcomPath}`,
+          media: `./${mediaPath}/`,
+          updatedAt: new Date().toISOString(),
+          sourceFile: state.fileName || gedcomName,
+          autoload: true,
+          github: { owner, repo, branch }
+        };
+        await putGitHubFile({ owner, repo, path: 'project.json', branch, token, message: `${message} · configura projeto`, contentBase64: textToBase64(JSON.stringify(manifest, null, 2) + '\n') });
+        await putGitHubFile({ owner, repo, path: gedcomPath, branch, token, message, contentBase64: textToBase64(gedcomText) });
+
+        state.projectManifest = manifest;
+        state.fileName = gedcomName;
+        state.dirty = false;
+        $('#githubToken').value = '';
+        $('#githubDialog').close();
+        updateStatus();
+        updateGitHubUi();
+        renderTree();
+        if (state.selectedId) renderDrawer(state.selectedId);
+        toast(`Alterações enviadas para ${owner}/${repo}: GEDCOM atualizado${uploaded ? ` e ${uploaded} mídia(s)` : ''}. O GitHub Pages pode levar alguns minutos para republicar.`, 'info', 9000);
+      } finally {
+        state.githubSaving = false;
+        updateGitHubUi();
         setLoading(false);
       }
     }
@@ -2059,6 +2289,88 @@
       }
     }
 
+    function removeDirectReferences(record, tag, pointer) {
+      if (!record) return;
+      record.children = record.children.filter(child => !(child.tag === tag && nodeText(child) === pointer));
+    }
+
+    function removeFamilyRecord(familyId) {
+      const family = state.families.get(familyId);
+      const record = family?.record || state.ast.records.find(item => item.tag === 'FAM' && item.xref === familyId);
+      if (!record) return false;
+      for (const person of state.persons.values()) {
+        removeDirectReferences(person.record, 'FAMS', familyId);
+        removeDirectReferences(person.record, 'FAMC', familyId);
+      }
+      state.ast.records = state.ast.records.filter(item => item !== record);
+      state.collapsedFamilies.delete(familyId);
+      return true;
+    }
+
+    function familyHasUsefulRelation(record) {
+      const spouses = ['HUSB','WIFE'].filter(tag => Boolean(directValue(record, tag))).length;
+      const children = directChildren(record, 'CHIL').filter(node => Boolean(nodeText(node))).length;
+      return children > 0 || spouses >= 2;
+    }
+
+    function openDeletePersonDialog() {
+      const person = state.persons.get(state.selectedId);
+      if (!person) return;
+      $('#deletePersonId').value = person.id;
+      const familyCount = new Set([...person.spouseFamilyIds, ...person.parentFamilyIds]).size;
+      $('#deletePersonSummary').innerHTML = `Excluir <strong>${escapeHtml(person.name.display)}</strong> (${escapeHtml(person.id)})?<br>A pessoa participa de <strong>${familyCount}</strong> unidade(s) familiar(es) e tem <strong>${person.media.length}</strong> referência(s) de mídia.`;
+      $('#deleteOrphanFamilies').checked = true;
+      $('#deletePersonDialog').showModal();
+    }
+
+    function deletePersonRecord(personId, { removeOrphanFamilies = true } = {}) {
+      const person = state.persons.get(personId);
+      if (!person) throw new Error('Pessoa não encontrada.');
+      const fallbackIds = [
+        ...getSpouses(personId).map(item => item.id),
+        ...getChildren(personId).map(item => item.id),
+        ...getParents(personId).map(item => item.id)
+      ];
+      const familyIds = new Set([...person.spouseFamilyIds, ...person.parentFamilyIds]);
+
+      for (const familyId of familyIds) {
+        const family = state.families.get(familyId);
+        if (!family) continue;
+        family.record.children = family.record.children.filter(child => {
+          if (!['HUSB','WIFE','CHIL'].includes(child.tag)) return true;
+          return nodeText(child) !== personId;
+        });
+      }
+
+      state.ast.records = state.ast.records.filter(record => record !== person.record);
+      state.expandedAncestors.delete(personId);
+      state.expandedDescendants.delete(personId);
+
+      buildModel(state.ast);
+      if (removeOrphanFamilies) {
+        for (const familyId of familyIds) {
+          const family = state.families.get(familyId);
+          if (family && !familyHasUsefulRelation(family.record)) removeFamilyRecord(familyId);
+        }
+        buildModel(state.ast);
+      }
+
+      const fallback = fallbackIds.find(id => state.persons.has(id)) || state.persons.keys().next().value || null;
+      state.rootId = state.rootId === personId || !state.persons.has(state.rootId) ? fallback : state.rootId;
+      state.selectedId = fallback;
+      updateStatus();
+      enableControls(Boolean(state.rootId));
+      $('#emptyState').style.display = state.rootId ? 'none' : 'grid';
+      if (fallback) {
+        renderTree({ fit: true });
+        openDrawer(fallback);
+      } else {
+        closeDrawer();
+        renderTree({ fit: true });
+      }
+      markDirty(`Pessoa excluída: ${person.name.display}. Salve na pasta ou no GitHub para tornar a exclusão permanente.`);
+    }
+
     function serializeNode(node) {
       const prefix = node.xref ? `${node.level} ${node.xref} ${node.tag}` : `${node.level} ${node.tag}`;
       const line = node.value !== '' && node.value != null ? `${prefix} ${node.value}` : prefix;
@@ -2446,6 +2758,7 @@
         const text = await decodeGedFile(blob);
         await loadGedcomText(text, blob.name);
         state.projectManifest = manifest;
+        updateGitHubUi();
         toast('Projeto web carregado. As mídias são procuradas na pasta indicada pelo project.json.');
       } catch (error) {
         toast('Não encontrei project.json/data/familia.ged neste site. Use “Abrir GEDCOM” ou “Projeto local”.', 'warning', 7000);
@@ -2457,6 +2770,7 @@
     function enableControls(enabled) {
       ['#searchInput','#orientationSelect','#btnMediaFolder','#btnExportGed','#btnExportJson','#btnZoomIn','#btnZoomOut','#btnFit','#btnCenter'].forEach(selector => $(selector).disabled = !enabled);
       updateLocalProjectUi();
+      updateGitHubUi();
     }
 
     function updateStatus() {
@@ -2580,6 +2894,7 @@
       $('#gedFile').addEventListener('change', event => importFile(event.target.files?.[0]));
       $('#btnOpenLocalRepo').addEventListener('click', () => connectLocalRepository({ load: true }));
       $('#btnSaveLocalRepo').addEventListener('click', saveLocalRepositoryProject);
+      $('#btnSaveGitHub').addEventListener('click', openGitHubDialog);
       $('#btnMediaFolder').addEventListener('click', () => $('#mediaFolderInput').click());
       $('#mediaFolderInput').addEventListener('change', event => {
         const count = registerLocalMediaFiles(event.target.files);
@@ -2594,6 +2909,7 @@
       $('#btnCenter').addEventListener('click', () => centerRoot());
       $('#drawerClose').addEventListener('click', closeDrawer);
       $('#btnFocusPerson').addEventListener('click', () => state.selectedId && focusPerson(state.selectedId));
+      $('#btnDeletePerson').addEventListener('click', openDeletePersonDialog);
       $('#orientationSelect').addEventListener('change', event => {
         state.orientation = event.target.value;
         renderTree({ fit: true });
@@ -2604,6 +2920,19 @@
       $('#exportGedForm').addEventListener('submit', event => {
         event.preventDefault();
         exportGedcomFromDialog();
+      });
+      ['githubOwner','githubRepo','githubBranch','githubGedcomPath','githubMediaPath'].forEach(id => $(`#${id}`).addEventListener('input', updateGitHubDialogSummary));
+      $('#githubForm').addEventListener('submit', async event => {
+        event.preventDefault();
+        try { await saveProjectToGitHub(); }
+        catch (error) { console.error(error); toast(`Falha ao salvar no GitHub: ${error.message}`, 'error', 9000); }
+      });
+      $('#deletePersonForm').addEventListener('submit', event => {
+        event.preventDefault();
+        const id = $('#deletePersonId').value;
+        $('#deletePersonDialog').close();
+        try { deletePersonRecord(id, { removeOrphanFamilies: $('#deleteOrphanFamilies').checked }); }
+        catch (error) { console.error(error); toast(`Falha ao excluir pessoa: ${error.message}`, 'error', 7000); }
       });
 
       $('#searchInput').addEventListener('input', renderSearchResults);
@@ -2633,7 +2962,7 @@
           refreshModel(id);
           renderTree();
           renderDrawer(id);
-          markDirty('Alterações guardadas no modelo local. Use “Salvar projeto” para persistir na pasta do Git.');
+          markDirty('Alterações guardadas no modelo local. Use “Salvar na pasta” ou “Salvar no GitHub” para persistir.');
         } catch (error) {
           toast(error.message, 'error');
         }
@@ -2647,7 +2976,7 @@
         state.pendingLocalMediaTarget = safeName;
         $('#mediaPath').value = `${normalizeMediaBase(state.settings.mediaBase)}${safeName}`;
         if (!$('#mediaTitle').value.trim()) $('#mediaTitle').value = safeName.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ');
-        $('#mediaLocalHint').innerHTML = `Selecionado: <strong>${escapeHtml(file.name)}</strong>. Ao salvar o projeto, o ficheiro será copiado para <strong>media/${escapeHtml(safeName)}</strong>.`;
+        $('#mediaLocalHint').innerHTML = `Selecionado: <strong>${escapeHtml(file.name)}</strong>. Ao salvar na pasta ou no GitHub, o ficheiro será copiado para <strong>media/${escapeHtml(safeName)}</strong>.`;
       });
 
       $('#btnAddMedia').addEventListener('click', () => {
@@ -2667,8 +2996,8 @@
         $('#mediaLocalFile').value = '';
         state.pendingLocalMediaFile = null;
         state.pendingLocalMediaTarget = '';
-        $('#mediaLocalHint').innerHTML = 'Ao escolher um ficheiro local, a página mostra-o imediatamente. Use <strong>Salvar projeto</strong> para copiar o ficheiro para <strong>./media/</strong> e guardar o GEDCOM.';
-        markDirty(localFile ? 'Mídia local associada. Use “Salvar projeto” para copiar o ficheiro e guardar o GEDCOM.' : 'Referência de mídia adicionada.');
+        $('#mediaLocalHint').innerHTML = 'Ao escolher um ficheiro local, a página mostra-o imediatamente. Use <strong>Salvar na pasta</strong> ou <strong>Salvar no GitHub</strong> para copiar o ficheiro para <strong>./media/</strong> e guardar o GEDCOM.';
+        markDirty(localFile ? 'Mídia local associada. Use “Salvar na pasta” ou “Salvar no GitHub” para copiar o ficheiro e guardar o GEDCOM.' : 'Referência de mídia adicionada.');
       });
 
       $('#relativeForm').addEventListener('submit', event => {
@@ -2691,7 +3020,7 @@
           $('#relativeDialog').close();
           renderTree();
           renderDrawer(oldSelected);
-          markDirty('Novo familiar criado e relacionado. Use “Salvar projeto” para persistir.');
+          markDirty('Novo familiar criado e relacionado. Use “Salvar na pasta” ou “Salvar no GitHub” para persistir.');
         } catch (error) {
           console.error(error);
           toast(error.message, 'error');
